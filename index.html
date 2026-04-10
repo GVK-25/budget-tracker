@@ -653,13 +653,20 @@ let _unsubscribe=null;
 let _syncTimeout=null;
 let _isCloudUser=false;
 let _fbUser=null; // holds the Firebase User object
+let _pendingKeys=new Set(); // tracks which keys need to be synced
 
 let rangeStart=null,rangeEnd=null,activePreset='thisYear';
 
 // ── Cloud helpers ─────────────────────────────────────────────────────────────
-async function _saveCloud(uid,key,value){
-  try{ await setDoc(doc(_db,'users',uid,'data',key),{value:JSON.stringify(value)},{merge:true}); }
-  catch(e){ console.warn('Firestore save failed',key,e); }
+async function _saveCloud(uid, pendingKeys){
+  // Write all pending keys in parallel — one Firestore write per key simultaneously
+  const writes = [...pendingKeys].map(key => {
+    const value = localStorage.getItem(key);
+    if(!value) return Promise.resolve();
+    return setDoc(doc(_db,'users',uid,'data',key), {value, updatedAt: Date.now()}, {merge:true})
+      .catch(e => console.warn('Firestore save failed', key, e));
+  });
+  await Promise.all(writes);
 }
 async function _loadCloud(uid,key){
   try{ const s=await getDoc(doc(_db,'users',uid,'data',key)); if(s.exists())return JSON.parse(s.data().value); }
@@ -676,9 +683,20 @@ function _listenCloud(uid,cb){
 function save(k,v){
   localStorage.setItem(k,JSON.stringify(v));
   if(_isCloudUser&&_fbUser){
+    _pendingKeys.add(k); // queue this key
     setSyncStatus('syncing');
     clearTimeout(_syncTimeout);
-    _syncTimeout=setTimeout(()=>{ _saveCloud(_fbUser.uid,k,v).then(()=>setSyncStatus('synced')).catch(()=>setSyncStatus('error')); },800);
+    // Wait 400ms after the LAST save call, then flush ALL pending keys at once
+    _syncTimeout=setTimeout(async ()=>{
+      const keys=new Set(_pendingKeys);
+      _pendingKeys.clear();
+      try{
+        await _saveCloud(_fbUser.uid, keys);
+        setSyncStatus('synced');
+      }catch(e){
+        setSyncStatus('error');
+      }
+    }, 400);
   }
 }
 
@@ -731,13 +749,17 @@ async function completeLogin(userInfo,fbUser){
       av.style.background='transparent';
       av.innerHTML=`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
     }
-    // Load Firestore data; cloud wins over local
+    // Load ALL Firestore keys in parallel (much faster than sequential)
     const keys=['bt_tx','bt_acc','bt_goals','bt_recur','bt_sub'];
     const results=await Promise.all(keys.map(k=>_loadCloud(fbUser.uid,k)));
+    const keysToUpload=[];
     keys.forEach((k,i)=>{
       if(results[i]!==null) localStorage.setItem(k,JSON.stringify(results[i]));
-      else{ const loc=localStorage.getItem(k); if(loc)_saveCloud(fbUser.uid,k,JSON.parse(loc)); }
+      else{ const loc=localStorage.getItem(k); if(loc) keysToUpload.push(k); }
     });
+    // Upload any missing keys all at once
+    if(keysToUpload.length) await _saveCloud(fbUser.uid, new Set(keysToUpload));
+
     // Reload in-memory vars from merged localStorage
     transactions =JSON.parse(localStorage.getItem('bt_tx')||'[]');
     goals        =JSON.parse(localStorage.getItem('bt_goals')||'[]');
@@ -746,29 +768,40 @@ async function completeLogin(userInfo,fbUser){
     SUBCATEGORIES=JSON.parse(localStorage.getItem('bt_sub')||JSON.stringify(DEFAULT_SUBCATEGORIES));
     setSyncStatus('synced');
 
-    // Real-time listener for other devices
+    // Real-time listener for changes from OTHER devices
+    // Debounced so rapid multi-doc updates don't cause multiple UI refreshes
+    let _listenerTimeout=null;
+    let _pendingCloudData={};
     if(_unsubscribe)_unsubscribe();
     _unsubscribe=_listenCloud(fbUser.uid,cloudData=>{
-      let changed=false;
-      Object.entries(cloudData).forEach(([k,v])=>{
-        const loc=JSON.parse(localStorage.getItem(k)||'null');
-        if(JSON.stringify(v)!==JSON.stringify(loc)){
-          localStorage.setItem(k,JSON.stringify(v));
-          if(k==='bt_tx')transactions=v;
-          if(k==='bt_acc')accounts=v;
-          if(k==='bt_goals')goals=v;
-          if(k==='bt_recur')recurringTxs=v;
-          if(k==='bt_sub'){SUBCATEGORIES=v;rebuildCategoryDropdowns();}
-          changed=true;
+      // Skip if this update was triggered by our own save (keys in _pendingKeys or recently cleared)
+      if(_pendingKeys.size>0||_syncTimeout) return;
+      // Merge incoming cloud data
+      Object.assign(_pendingCloudData, cloudData);
+      clearTimeout(_listenerTimeout);
+      _listenerTimeout=setTimeout(()=>{
+        let changed=false;
+        Object.entries(_pendingCloudData).forEach(([k,v])=>{
+          const loc=JSON.parse(localStorage.getItem(k)||'null');
+          if(JSON.stringify(v)!==JSON.stringify(loc)){
+            localStorage.setItem(k,JSON.stringify(v));
+            if(k==='bt_tx')transactions=v;
+            if(k==='bt_acc')accounts=v;
+            if(k==='bt_goals')goals=v;
+            if(k==='bt_recur')recurringTxs=v;
+            if(k==='bt_sub'){SUBCATEGORIES=v;rebuildCategoryDropdowns();}
+            changed=true;
+          }
+        });
+        _pendingCloudData={};
+        if(changed){
+          setSyncStatus('synced');
+          updateSummary();renderAccounts();renderGoals();
+          if(document.getElementById('tab-log').classList.contains('active'))renderTable();
+          if(document.getElementById('tab-analytics').classList.contains('active'))renderAnalytics();
+          showToast('🔄 Updated from another device');
         }
-      });
-      if(changed){
-        setSyncStatus('synced');
-        updateSummary();renderAccounts();renderGoals();
-        if(document.getElementById('tab-log').classList.contains('active'))renderTable();
-        if(document.getElementById('tab-analytics').classList.contains('active'))renderAnalytics();
-        showToast('🔄 Updated from another device');
-      }
+      }, 600); // wait 600ms for all docs in the snapshot batch to arrive
     });
   }
   initApp();
