@@ -434,7 +434,6 @@ tr:hover td{background:var(--surface2);}
 .subcat-tag{display:inline-flex;align-items:center;gap:5px;background:var(--surface);border:2px solid var(--border);border-radius:20px;padding:3px 9px;font-size:.68rem;}
 .subcat-del{background:none;border:none;color:var(--text2);cursor:pointer;font-size:.65rem;padding:0;line-height:1;transition:color .18s;}
 .subcat-del:hover{color:var(--expense-color);}
-.subcat-del.protected{cursor:not-allowed;opacity:.22;}
 .add-subcat-row{display:flex;gap:7px;padding:7px 13px 11px;border-top:2px solid var(--border);}
 .add-subcat-row input{flex:1;font-size:.76rem;padding:5px 10px;}
 .add-subcat-btn{background:var(--accent);color:#fff;border:2px solid var(--text);font-family:'Nunito',sans-serif;font-weight:800;font-size:.72rem;padding:5px 12px;border-radius:8px;cursor:pointer;white-space:nowrap;box-shadow:2px 2px 0 var(--text);transition:all .16s;}
@@ -932,7 +931,7 @@ function getChartColors(){return CHART_COLORS_BASE.map(v=>getCSSVar(v));}
 const CHART_COLORS=getChartColors();
 
 const DEFAULT_SUBCATEGORIES={Income:['PW Stipend','Other Income','Freelance','Investment Returns'],Expenses:['Rent','Food','Travel','Education','Utilities','Health','Entertainment','Other']};
-const PROTECTED=JSON.parse(JSON.stringify(DEFAULT_SUBCATEGORIES));
+const PROTECTED={}; // all subcategories are now fully editable
 
 let SUBCATEGORIES=JSON.parse(localStorage.getItem('bt_sub')||JSON.stringify(DEFAULT_SUBCATEGORIES));
 let transactions=JSON.parse(localStorage.getItem('bt_tx')||'[]');
@@ -1803,17 +1802,22 @@ function closeCatModal(){document.getElementById('catModal').classList.remove('o
 function renderCatGroups(){
   const c=document.getElementById('catGroupsList');
   c.innerHTML=Object.entries(SUBCATEGORIES).map(([cat,subs])=>{
-    const isB=cat==='Income'||cat==='Expenses';
-    const badge=cat==='Income'?'<span class="type-badge income">income</span>':'<span class="type-badge expenses">expenses</span>';
-    const del=!isB?`<button class="cat-del-btn" onclick="deleteCat('${cat}')">remove</button>`:`<span style="font-size:.59rem;color:var(--text2);opacity:.4">built-in</span>`;
-    const tags=subs.filter(s=>typeof s==='string').map(s=>{const p=PROTECTED[cat]?.includes(s);return`<span class="subcat-tag">${s}<button class="subcat-del${p?' protected':''}" ${p?'disabled':''} onclick="delSubcat('${cat}','${s}')">✕</button></span>`;}).join('');
-    return`<div class="cat-group" style="margin-bottom:8px"><div class="cat-group-header"><span>${cat}</span><div style="display:flex;align-items:center;gap:7px">${badge}${del}</div></div><div class="subcat-list">${tags||'<span style="color:var(--text2);font-size:.71rem">No subcategories</span>'}</div><div class="add-subcat-row"><input type="text" id="ns_${cat}" placeholder="New subcategory…"><button class="add-subcat-btn" onclick="addSubcat('${cat}')">+ Add</button></div></div>`;
+    const del=`<button class="cat-del-btn" onclick="deleteCat('${cat}')">remove</button>`;
+    const tags=subs.filter(s=>typeof s==='string').map(s=>`<span class="subcat-tag">${s}<button class="subcat-del" onclick="delSubcat('${cat}','${s}')">✕</button></span>`).join('');
+    return`<div class="cat-group" style="margin-bottom:8px"><div class="cat-group-header"><span>${cat}</span><div style="display:flex;align-items:center;gap:7px">${del}</div></div><div class="subcat-list">${tags||'<span style="color:var(--text2);font-size:.71rem">No subcategories</span>'}</div><div class="add-subcat-row"><input type="text" id="ns_${cat}" placeholder="New subcategory…"><button class="add-subcat-btn" onclick="addSubcat('${cat}')">+ Add</button></div></div>`;
   }).join('');
 }
 function addSubcat(cat){const el=document.getElementById('ns_'+cat);const n=el.value.trim();if(!n)return;if((SUBCATEGORIES[cat]||[]).includes(n)){showToast('Exists!',true);return;}SUBCATEGORIES[cat]=[...(SUBCATEGORIES[cat]||[]),n];save('bt_sub',SUBCATEGORIES);rebuildCategoryDropdowns();renderCatGroups();el.value='';showToast(`"${n}" added`);}
 function delSubcat(cat,s){SUBCATEGORIES[cat]=SUBCATEGORIES[cat].filter(x=>x!==s);save('bt_sub',SUBCATEGORIES);rebuildCategoryDropdowns();renderCatGroups();showToast(`"${s}" removed`);}
 function addCategory(){const n=document.getElementById('newCatName').value.trim();if(!n)return;if(SUBCATEGORIES[n]){showToast('Exists!',true);return;}SUBCATEGORIES[n]=[];save('bt_sub',SUBCATEGORIES);rebuildCategoryDropdowns();renderCatGroups();document.getElementById('newCatName').value='';showToast(`"${n}" created`);}
-function deleteCat(cat){if(cat==='Income'||cat==='Expenses')return;delete SUBCATEGORIES[cat];save('bt_sub',SUBCATEGORIES);rebuildCategoryDropdowns();renderCatGroups();showToast(`"${cat}" removed`);}
+function deleteCat(cat){
+  if(!confirm(`Delete category "${cat}" and all its subcategories? This won't delete existing transactions.`))return;
+  delete SUBCATEGORIES[cat];
+  save('bt_sub',SUBCATEGORIES);
+  rebuildCategoryDropdowns();
+  renderCatGroups();
+  showToast(`"${cat}" removed`);
+}
 document.getElementById('catModal').addEventListener('click',e=>{if(e.target===document.getElementById('catModal'))closeCatModal();});
 
 /* ---- TOAST ---- */
