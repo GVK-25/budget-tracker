@@ -1000,7 +1000,7 @@ function setSyncStatus(state){
   else{dot.className='sync-dot';dot.style.background='var(--danger)';lbl.textContent='Sync error';}
 }
 
-function fmt(n){return CURRENCY+Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
+function fmt(n){return (n<0?'-':'')+CURRENCY+Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
 function fmtShort(n){return CURRENCY+Math.round(Math.abs(n)).toLocaleString('en-IN');}
 function today(){return new Date().toISOString().split('T')[0];}
 
@@ -1190,7 +1190,7 @@ function renderAccounts(){
     <div class="account-card">
       <div class="account-icon">${a.icon||'💳'}</div>
       <div class="account-name">${a.name}</div>
-      <div class="account-balance" id="acc-bal-${a.id}">${fmt(a.balance)}</div>
+      <div class="account-balance" id="acc-bal-${a.id}" style="color:${a.balance<0?'var(--expense-color)':'var(--accent2)'}">${fmt(a.balance)}</div>
       <div class="account-edit-row">
         <input type="number" id="acc-inp-${a.id}" value="${a.balance}" min="0" step="0.01" style="font-size:.75rem">
         <button class="acc-edit-btn" onclick="updateAccountBalance(${a.id})">Set</button>
@@ -1327,6 +1327,17 @@ function onTxTypeChange(){
   document.getElementById('txCatRow').style.display=type==='transfer'?'none':'grid';
   document.getElementById('txTransferRow').style.display=type==='transfer'?'grid':'none';
   document.getElementById('txAccountField').querySelector('label').textContent=type==='income'?'To Account':'From Account';
+  const catField=document.querySelector('#txCatRow .field:first-child');
+  const subLabel=document.querySelector('#txCatRow .field:last-child label');
+  if(type==='income'){
+    catField.style.display='none';
+    subLabel.textContent='Income Source';
+    document.getElementById('txSubcategory').innerHTML=(SUBCATEGORIES['Income']||[]).filter(s=>typeof s==='string').map(s=>`<option>${s}</option>`).join('');
+  } else {
+    catField.style.display='';
+    subLabel.textContent='Sub-Category';
+    rebuildCategoryDropdowns();
+  }
 }
 function updateSubcategories(){
   const cat=document.getElementById('txCategory').value;
@@ -1338,11 +1349,13 @@ function updateEditSubcategories(){
 }
 function rebuildCategoryDropdowns(){
   const cats=Object.keys(SUBCATEGORIES);
-  ['txCategory','editCategory'].forEach(id=>{
-    const el=document.getElementById(id);if(!el)return;
-    const cur=el.value;
-    el.innerHTML=cats.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');
-  });
+  const expCats=cats.filter(c=>c!=='Income');
+  // txCategory: only expense categories
+  const txCatEl=document.getElementById('txCategory');
+  if(txCatEl){const cur=txCatEl.value;txCatEl.innerHTML=expCats.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');}
+  // editCategory: all categories
+  const editCatEl=document.getElementById('editCategory');
+  if(editCatEl){const cur=editCatEl.value;editCatEl.innerHTML=cats.map(c=>`<option value="${c}" ${c===cur?'selected':''}>${c}</option>`).join('');}
   updateSubcategories();populateGoalSubcatDropdown();
 }
 function addTransaction(){
@@ -1360,7 +1373,7 @@ function addTransaction(){
     save('bt_tx',transactions);renderAccounts();updateSummary();showToast('Transfer added!');
   } else {
     const category=type==='income'?'Income':document.getElementById('txCategory').value;
-    const subcategory=type==='income'?document.getElementById('txSubcategory').value:document.getElementById('txSubcategory').value;
+    const subcategory=document.getElementById('txSubcategory').value;
     const accountId=parseInt(document.getElementById('txAccount').value);
     const recurring=document.getElementById('txRecurring').value;
     const notes=document.getElementById('txNotes').value;
