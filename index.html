@@ -927,6 +927,7 @@ const CURRENCY='₹';
 const MONTHS_SHORT=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MONTHS_LONG=['January','February','March','April','May','June','July','August','September','October','November','December'];
 const CHART_COLORS_BASE=['--accent','--accent2','--accent4','--accent3','--expense-color','--income-color','--balance-color','--warning','--transfer-color','--danger'];
+function getCSSVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
 function getChartColors(){return CHART_COLORS_BASE.map(v=>getCSSVar(v));}
 const CHART_COLORS=getChartColors();
 
@@ -1681,7 +1682,6 @@ function applyCustomRange(){
 /* ---- ANALYTICS ---- */
 const charts={};let analyticsView='monthly';
 function destroyChart(id){if(charts[id]){charts[id].destroy();delete charts[id];}}
-function getCSSVar(name){return getComputedStyle(document.documentElement).getPropertyValue(name).trim();}
 function getChartOpts(horizontal=false){
   const tc=getCSSVar('--text2');const gc=getCSSVar('--border');
   const o={plugins:{legend:{labels:{color:tc,font:{family:'Fira Code',size:11}}}},scales:{x:{ticks:{color:tc,font:{family:'Fira Code',size:10}},grid:{color:gc}},y:{ticks:{color:tc,font:{family:'Fira Code',size:10},callback:v=>'₹'+Math.round(v).toLocaleString('en-IN')},grid:{color:gc}}}};
@@ -1739,7 +1739,7 @@ function renderMonthlyView(txs){
   const bySub={};txs.filter(t=>t.category!=='Income').forEach(t=>{bySub[t.subcategory]=(bySub[t.subcategory]||0)+t.amount;});
   const sorted=Object.entries(bySub).sort((a,b)=>b[1]-a[1]).slice(0,8);
   destroyChart('mDough');
-  charts['mDough']=new Chart(document.getElementById('chart-doughnut'),{type:'doughnut',data:{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>e[1]),backgroundColor:getChartColors(),borderColor:getCSSVar('--bg'),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:getCSSVar('--text2'),font:{family:'Fira Code',size:10},boxWidth:9,padding:6}}}}}});
+  charts['mDough']=new Chart(document.getElementById('chart-doughnut'),{type:'doughnut',data:{labels:sorted.map(e=>e[0]),datasets:[{data:sorted.map(e=>e[1]),backgroundColor:getChartColors(),borderColor:getCSSVar('--bg'),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'right',labels:{color:getCSSVar('--text2'),font:{family:'Fira Code',size:10},boxWidth:9,padding:6}}}}});
 }
 function renderWeeklyView(txs){
   const s=rangeStart?new Date(rangeStart):new Date(new Date().getFullYear(),0,1);
@@ -1794,7 +1794,7 @@ function renderAccountsView(txs){
   destroyChart('accSpend');
   charts['accSpend']=new Chart(document.getElementById('chart-accSpend'),{type:'bar',data:{labels:accs.map(a=>`${a.icon} ${a.name}`),datasets:[{label:'Total Spent',data:accs.map(a=>a.spend),backgroundColor:getChartColors(),borderRadius:6}]},options:{responsive:true,maintainAspectRatio:false,...o,plugins:{legend:{display:false}}}});
   destroyChart('accBal');
-  charts['accBal']=new Chart(document.getElementById('chart-accBal'),{type:'doughnut',data:{labels:accounts.map(a=>`${a.icon} ${a.name}`),datasets:[{data:accounts.map(a=>Math.max(a.balance,0)),backgroundColor:getChartColors(),borderColor:getCSSVar('--bg'),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:getCSSVar('--text2'),font:{family:'Fira Code',size:10},boxWidth:9,padding:6}}}}}});
+  charts['accBal']=new Chart(document.getElementById('chart-accBal'),{type:'doughnut',data:{labels:accounts.map(a=>`${a.icon} ${a.name}`),datasets:[{data:accounts.map(a=>Math.max(a.balance,0)),backgroundColor:getChartColors(),borderColor:getCSSVar('--bg'),borderWidth:2}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:getCSSVar('--text2'),font:{family:'Fira Code',size:10},boxWidth:9,padding:6}}}}});
 }
 
 /* ---- CATEGORY MANAGEMENT ---- */
