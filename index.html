@@ -86,14 +86,17 @@ textarea{resize:none;width:100%;}
 .btn-secondary:hover{border-color:var(--text2);}
 
 /* ACCOUNTS */
-.accounts-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:12px;margin-bottom:20px;}
-.account-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;position:relative;transition:border-color .2s;}
+.accounts-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:20px;}
+@media(max-width:1100px){.accounts-grid{grid-template-columns:repeat(3,1fr);}}
+@media(max-width:760px){.accounts-grid{grid-template-columns:repeat(2,1fr);}}
+@media(max-width:480px){.accounts-grid{grid-template-columns:1fr;}}
+.account-card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:18px;position:relative;transition:border-color .2s;display:flex;flex-direction:column;}
 .account-card:hover{border-color:var(--accent2);}
 .account-icon{font-size:1.4rem;margin-bottom:8px;}
-.account-name{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:700;margin-bottom:4px;}
-.account-balance{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:700;color:var(--accent2);}
-.account-edit-row{display:flex;gap:6px;margin-top:10px;}
-.account-edit-row input{flex:1;font-size:.78rem;padding:6px 10px;}
+.account-name{font-family:'Syne',sans-serif;font-size:.82rem;font-weight:700;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
+.account-balance{font-family:'Syne',sans-serif;font-size:1.5rem;font-weight:700;color:var(--accent2);margin-bottom:auto;padding-bottom:10px;}
+.account-edit-row{display:flex;gap:6px;margin-top:10px;align-items:center;}
+.account-edit-row input{flex:1;font-size:.78rem;padding:6px 10px;min-width:0;}
 .acc-edit-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:.68rem;padding:4px 10px;border-radius:6px;cursor:pointer;font-family:'DM Mono',monospace;transition:all .2s;white-space:nowrap;}
 .acc-edit-btn:hover{border-color:var(--accent);color:var(--accent);}
 .acc-del-btn{background:none;border:1px solid var(--border);color:var(--text2);font-size:.68rem;padding:4px 8px;border-radius:6px;cursor:pointer;transition:all .2s;}
@@ -138,6 +141,21 @@ textarea{resize:none;width:100%;}
 .log-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;overflow:hidden;}
 .log-header{padding:14px 20px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:9px;}
 .filter-row{padding:11px 20px;border-bottom:1px solid var(--border);display:flex;gap:7px;flex-wrap:wrap;align-items:center;}
+
+/* Multi-select bulk delete */
+.bulk-bar{padding:10px 20px;background:rgba(240,96,168,.08);border-bottom:1px solid rgba(240,96,168,.2);display:none;align-items:center;gap:12px;flex-wrap:wrap;}
+.bulk-bar.show{display:flex;}
+.bulk-count{font-size:.76rem;color:var(--text2);flex:1;}
+.bulk-count strong{color:var(--expense-color);}
+.bulk-del-btn{background:var(--expense-color);color:#fff;border:none;font-family:'Syne',sans-serif;font-weight:700;font-size:.76rem;padding:7px 16px;border-radius:8px;cursor:pointer;transition:opacity .2s;}
+.bulk-del-btn:hover{opacity:.85;}
+.bulk-cancel-btn{background:none;border:1px solid var(--border);color:var(--text2);font-family:'DM Mono',monospace;font-size:.74rem;padding:6px 14px;border-radius:8px;cursor:pointer;transition:all .2s;}
+.bulk-cancel-btn:hover{border-color:var(--text2);}
+
+/* Row checkbox */
+.row-check{width:15px;height:15px;accent-color:var(--expense-color);cursor:pointer;}
+th.check-col,td.check-col{width:36px;padding-left:16px;padding-right:4px;}
+tr.selected td{background:rgba(240,96,168,.06)!important;}
 .search-wrap{position:relative;flex:1;min-width:130px;}
 .search-wrap input{width:100%;padding-left:28px;}
 .search-icon{position:absolute;left:9px;top:50%;transform:translateY(-50%);color:var(--text2);font-size:.76rem;pointer-events:none;}
@@ -544,8 +562,17 @@ tr:hover td{background:var(--surface2);}
         </select>
         <select id="filterYear" onchange="renderTable()"><option value="All">All Years</option></select>
       </div>
+      <!-- Bulk delete toolbar — shown when rows are selected -->
+      <div class="bulk-bar" id="bulkBar">
+        <span class="bulk-count"><strong id="bulkCount">0</strong> rows selected</span>
+        <button class="bulk-del-btn" onclick="deleteSelected()">🗑 Delete Selected</button>
+        <button class="bulk-cancel-btn" onclick="clearSelection()">Cancel</button>
+      </div>
       <table>
-        <thead><tr><th>Date</th><th>Category</th><th>Sub-Cat</th><th>Account</th><th>Notes</th><th>Amount</th><th>Running Bal</th><th>Actions</th></tr></thead>
+        <thead><tr>
+          <th class="check-col"><input type="checkbox" class="row-check" id="selectAll" onchange="toggleSelectAll(this)" title="Select all"></th>
+          <th>Date</th><th>Category</th><th>Sub-Cat</th><th>Account</th><th>Notes</th><th>Amount</th><th>Running Bal</th><th>Actions</th>
+        </tr></thead>
         <tbody id="txBody"></tbody>
       </table>
       <div id="emptyState" class="empty-state"><span>📋</span>No transactions found.</div>
@@ -1087,6 +1114,59 @@ function deleteTransaction(id){
   }
   transactions=transactions.filter(tx=>tx.id!==id);save('bt_tx',transactions);updateSummary();renderTable();renderAccounts();showToast('Deleted.');
 }
+
+/* ── MULTI SELECT / BULK DELETE ─────────────────────────────────────────────── */
+function onRowCheck(cb){
+  const id=parseInt(cb.dataset.id);
+  const row=cb.closest('tr');
+  row.classList.toggle('selected',cb.checked);
+  updateBulkBar();
+  // Sync select-all state
+  const all=document.querySelectorAll('#txBody .row-check');
+  const checked=document.querySelectorAll('#txBody .row-check:checked');
+  const selAll=document.getElementById('selectAll');
+  if(selAll){
+    selAll.checked=checked.length===all.length&&all.length>0;
+    selAll.indeterminate=checked.length>0&&checked.length<all.length;
+  }
+}
+function toggleSelectAll(cb){
+  document.querySelectorAll('#txBody .row-check').forEach(r=>{
+    r.checked=cb.checked;
+    r.closest('tr').classList.toggle('selected',cb.checked);
+  });
+  updateBulkBar();
+}
+function updateBulkBar(){
+  const count=document.querySelectorAll('#txBody .row-check:checked').length;
+  const bar=document.getElementById('bulkBar');
+  document.getElementById('bulkCount').textContent=count;
+  bar.classList.toggle('show',count>0);
+}
+function clearSelection(){
+  document.querySelectorAll('#txBody .row-check').forEach(r=>{r.checked=false;r.closest('tr').classList.remove('selected');});
+  const selAll=document.getElementById('selectAll');
+  if(selAll){selAll.checked=false;selAll.indeterminate=false;}
+  document.getElementById('bulkBar').classList.remove('show');
+}
+function deleteSelected(){
+  const ids=[...document.querySelectorAll('#txBody .row-check:checked')].map(r=>parseInt(r.dataset.id));
+  if(!ids.length)return;
+  if(!confirm(`Delete ${ids.length} transaction${ids.length>1?'s':''}? This cannot be undone.`))return;
+  // Reverse account balances for each deleted transaction
+  ids.forEach(id=>{
+    const t=transactions.find(tx=>tx.id===id);
+    if(t){
+      const acc=accounts.find(a=>a.id===t.accountId);
+      if(acc&&!t.isTransfer){if(t.category==='Income')acc.balance-=t.amount;else acc.balance+=t.amount;}
+    }
+  });
+  save('bt_acc',accounts);
+  transactions=transactions.filter(tx=>!ids.includes(tx.id));
+  save('bt_tx',transactions);
+  updateSummary();renderTable();renderAccounts();
+  showToast(`${ids.length} transaction${ids.length>1?'s':''} deleted.`);
+}
 document.getElementById('editModal').addEventListener('click',e=>{if(e.target===document.getElementById('editModal'))closeEditModal();});
 
 /* ---- MEMO ---- */
@@ -1124,6 +1204,10 @@ function renderTable(){
   const fSubEl=document.getElementById('filterSub');const cSub=fSubEl.value;
   fSubEl.innerHTML='<option value="All">All Sub-Cat</option>'+allSubs.map(s=>`<option ${s===cSub?'selected':''}>${s}</option>`).join('');
   const body=document.getElementById('txBody'),empty=document.getElementById('emptyState');
+  // Reset select-all checkbox & bulk bar when table re-renders
+  const selAll=document.getElementById('selectAll');
+  if(selAll)selAll.checked=false;
+  document.getElementById('bulkBar').classList.remove('show');
   if(!txs.length){body.innerHTML='';empty.style.display='block';return;}
   empty.style.display='none';
   const sorted2=[...transactions].sort((a,b)=>new Date(a.date)-new Date(b.date));
@@ -1140,7 +1224,20 @@ function renderTable(){
     const accName=isT?`${accMap[t.fromAccount]?.name||'?'} → ${accMap[t.toAccount]?.name||'?'}`:(accMap[t.accountId]?.name||'—');
     const rb2=`<span class="run-bal" style="color:${rb>=0?'var(--income-color)':'var(--expense-color)'}">${rb>=0?'+':'-'}${fmt(rb)}</span>`;
     const recurBadge=t.recurring&&t.recurring!=='none'?`<span class="recur-badge">↺${t.recurring}</span>`:'';
-    return `<tr><td>${ds}</td><td><span class="cat-pill${isT?' transfer':''}">${isT?'Transfer':t.category}</span></td><td>${t.subcategory}${recurBadge}</td><td style="color:var(--text2);font-size:.72rem">${accName}</td><td style="color:var(--text2)">${t.notes||'—'}</td><td class="${cls}">${sign}${fmt(t.amount)}</td><td>${rb2}</td><td style="display:flex;gap:5px"><button class="edit-btn" onclick="openEditModal(${t.id})">edit</button><button class="delete-btn" onclick="deleteTransaction(${t.id})">del</button></td></tr>`;
+    return `<tr data-id="${t.id}">
+      <td class="check-col"><input type="checkbox" class="row-check" onchange="onRowCheck(this)" data-id="${t.id}"></td>
+      <td>${ds}</td>
+      <td><span class="cat-pill${isT?' transfer':''}">${isT?'Transfer':t.category}</span></td>
+      <td>${t.subcategory}${recurBadge}</td>
+      <td style="color:var(--text2);font-size:.72rem">${accName}</td>
+      <td style="color:var(--text2)">${t.notes||'—'}</td>
+      <td class="${cls}">${sign}${fmt(t.amount)}</td>
+      <td>${rb2}</td>
+      <td style="display:flex;gap:5px">
+        <button class="edit-btn" onclick="openEditModal(${t.id})">edit</button>
+        <button class="delete-btn" onclick="deleteTransaction(${t.id})">del</button>
+      </td>
+    </tr>`;
   }).join('');
 }
 
@@ -1444,6 +1541,7 @@ Object.assign(window,{
   loginWithGoogle,loginLocal,toggleUserMenu,toggleTheme,switchTab,
   openCatModal,closeCatModal,addSubcat,delSubcat,addCategory,deleteCat,
   openEditModal,closeEditModal,saveEdit,deleteTransaction,
+  onRowCheck,toggleSelectAll,deleteSelected,clearSelection,
   openImportModal,closeImportModal,onImportDrop,onImportFile,confirmImport,
   exportCSV,addTransaction,onTxTypeChange,updateSubcategories,updateEditSubcategories,
   addAccount,deleteAccount,updateAccountBalance,doTransfer,populateAccountDropdowns,
