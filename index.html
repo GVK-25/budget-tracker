@@ -955,13 +955,24 @@ tr:hover td{background:var(--surface2);}
   <div class="modal">
     <div class="modal-title">Edit Transaction <button class="modal-close" onclick="closeEditModal()">✕</button></div>
     <input type="hidden" id="editId">
+    <input type="hidden" id="editIsTransfer">
     <div class="form-row">
       <div class="field"><label>Date</label><input type="date" id="editDate"></div>
       <div class="field"><label>Amount (₹)</label><input type="number" id="editAmount" min="0" step="0.01"></div>
     </div>
-    <div class="form-row">
-      <div class="field"><label>Category</label><select id="editCategory" onchange="updateEditSubcategories()"></select></div>
-      <div class="field"><label>Sub-Category</label><select id="editSubcategory"></select></div>
+    <!-- Regular transaction fields -->
+    <div id="editRegularFields">
+      <div class="form-row">
+        <div class="field"><label>Category</label><select id="editCategory" onchange="updateEditSubcategories()"></select></div>
+        <div class="field"><label>Sub-Category</label><select id="editSubcategory"></select></div>
+      </div>
+    </div>
+    <!-- Transfer-specific fields -->
+    <div id="editTransferFields" style="display:none">
+      <div class="form-row">
+        <div class="field"><label>From Account</label><select id="editTransferFrom"></select></div>
+        <div class="field"><label>To Account</label><select id="editTransferTo"></select></div>
+      </div>
     </div>
     <div class="field" style="margin-bottom:11px"><label>Notes</label><textarea id="editNotes" style="height:56px"></textarea></div>
     <div class="modal-actions">
@@ -1517,11 +1528,27 @@ function openEditModal(id){
   document.getElementById('editId').value=id;
   document.getElementById('editDate').value=t.date;
   document.getElementById('editAmount').value=t.amount;
-  rebuildCategoryDropdowns();
-  document.getElementById('editCategory').value=t.category;
-  updateEditSubcategories();
-  document.getElementById('editSubcategory').value=t.subcategory;
   document.getElementById('editNotes').value=t.notes||'';
+  document.getElementById('editIsTransfer').value=t.isTransfer?'1':'';
+
+  if(t.isTransfer){
+    // Show transfer fields, hide regular
+    document.getElementById('editRegularFields').style.display='none';
+    document.getElementById('editTransferFields').style.display='';
+    // Populate from/to dropdowns
+    const accOptions=accounts.map(a=>`<option value="${a.id}">${a.icon||'💳'} ${a.name}</option>`).join('');
+    document.getElementById('editTransferFrom').innerHTML=accOptions;
+    document.getElementById('editTransferTo').innerHTML=accOptions;
+    document.getElementById('editTransferFrom').value=t.fromAccount;
+    document.getElementById('editTransferTo').value=t.toAccount;
+  } else {
+    document.getElementById('editRegularFields').style.display='';
+    document.getElementById('editTransferFields').style.display='none';
+    rebuildCategoryDropdowns();
+    document.getElementById('editCategory').value=t.category;
+    updateEditSubcategories();
+    document.getElementById('editSubcategory').value=t.subcategory;
+  }
   document.getElementById('editModal').classList.add('open');
 }
 function closeEditModal(){document.getElementById('editModal').classList.remove('open');}
@@ -1529,12 +1556,43 @@ function saveEdit(){
   const id=parseInt(document.getElementById('editId').value);
   const date=document.getElementById('editDate').value;
   const amount=parseFloat(document.getElementById('editAmount').value);
-  const category=document.getElementById('editCategory').value;
-  const subcategory=document.getElementById('editSubcategory').value;
   const notes=document.getElementById('editNotes').value;
+  const isTransfer=document.getElementById('editIsTransfer').value==='1';
   if(!date||isNaN(amount)||amount<=0){showToast('Fill date and amount!',true);return;}
   const idx=transactions.findIndex(t=>t.id===id);
-  if(idx!==-1){transactions[idx]={...transactions[idx],date,amount,category,subcategory,notes};save('bt_tx',transactions);updateSummary();renderTable();showToast('Updated!');}
+  if(idx===-1){closeEditModal();return;}
+  const old=transactions[idx];
+
+  if(isTransfer){
+    const newFromId=parseInt(document.getElementById('editTransferFrom').value);
+    const newToId=parseInt(document.getElementById('editTransferTo').value);
+    if(newFromId===newToId){showToast('Choose different accounts',true);return;}
+    // Reverse old transfer effect on balances
+    const oldFrom=accounts.find(a=>a.id===old.fromAccount);
+    const oldTo=accounts.find(a=>a.id===old.toAccount);
+    if(oldFrom)oldFrom.balance+=old.amount;
+    if(oldTo)oldTo.balance-=old.amount;
+    // Apply new transfer
+    const newFrom=accounts.find(a=>a.id===newFromId);
+    const newTo=accounts.find(a=>a.id===newToId);
+    if(newFrom)newFrom.balance-=amount;
+    if(newTo)newTo.balance+=amount;
+    save('bt_acc',accounts);
+    const subLabel=`${newFrom?.name||'?'} → ${newTo?.name||'?'}`;
+    transactions[idx]={...old,date,amount,notes,fromAccount:newFromId,toAccount:newToId,subcategory:subLabel};
+  } else {
+    const category=document.getElementById('editCategory').value;
+    const subcategory=document.getElementById('editSubcategory').value;
+    // Reverse old balance effect
+    const oldAcc=accounts.find(a=>a.id===old.accountId);
+    if(oldAcc){if(old.category==='Income')oldAcc.balance-=old.amount;else oldAcc.balance+=old.amount;}
+    // Apply new balance effect
+    if(oldAcc){if(category==='Income')oldAcc.balance+=amount;else oldAcc.balance-=amount;save('bt_acc',accounts);}
+    transactions[idx]={...old,date,amount,category,subcategory,notes};
+  }
+  save('bt_tx',transactions);
+  updateSummary();renderTable();renderAccounts();
+  showToast('Updated!');
   closeEditModal();
 }
 function deleteTransaction(id){
