@@ -272,8 +272,14 @@ textarea{resize:none;width:100%;}
   border-radius:18px;padding:18px;
   transition:all .2s;display:flex;flex-direction:column;
   box-shadow:3px 3px 0 var(--border);
+  cursor:default;
 }
 .account-card:hover{border-color:var(--accent2);box-shadow:4px 4px 0 var(--accent2);transform:translate(-1px,-1px);}
+.account-card.dragging{opacity:.45;transform:scale(.97);box-shadow:none;border-style:dashed;}
+.account-card.drag-over{border-color:var(--accent);box-shadow:0 0 0 3px rgba(255,92,53,.25);transform:translate(-2px,-2px);}
+.acc-drag-handle{cursor:grab;color:var(--text2);font-size:.85rem;padding:2px 4px;border-radius:5px;transition:color .15s;line-height:1;user-select:none;}
+.acc-drag-handle:hover{color:var(--accent);}
+.acc-drag-handle:active{cursor:grabbing;}
 .account-icon{font-size:1.6rem;margin-bottom:8px;}
 .account-name{font-family:'Nunito',sans-serif;font-size:.82rem;font-weight:800;margin-bottom:4px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;}
 .account-balance{font-family:'Nunito',sans-serif;font-size:1.5rem;font-weight:900;color:var(--accent2);margin-bottom:auto;padding-bottom:10px;}
@@ -1291,11 +1297,14 @@ function renderAccounts(){
   const grid=document.getElementById('accountsGrid');
   if(!accounts.length){grid.innerHTML='<div style="color:var(--text2);font-size:.8rem;padding:20px">No accounts yet.</div>';return;}
   grid.innerHTML=accounts.map(a=>`
-    <div class="account-card" id="acc-card-${a.id}">
+    <div class="account-card" id="acc-card-${a.id}" draggable="true" data-id="${a.id}">
       <div class="acc-top-row">
-        <div>
-          <div class="account-icon">${a.icon||'💳'}</div>
-          <div class="account-name">${a.name}</div>
+        <div style="display:flex;align-items:center;gap:7px">
+          <span class="acc-drag-handle" title="Drag to reorder">⠿</span>
+          <div>
+            <div class="account-icon">${a.icon||'💳'}</div>
+            <div class="account-name">${a.name}</div>
+          </div>
         </div>
         <div style="display:flex;gap:5px;align-items:flex-start">
           <button class="acc-edit-btn" onclick="toggleAccEdit(${a.id})" title="Edit account">✏️</button>
@@ -1320,6 +1329,44 @@ function renderAccounts(){
       </div>
     </div>`).join('');
   populateAccountDropdowns();
+  initAccountDrag();
+}
+
+let _dragSrcId=null;
+function initAccountDrag(){
+  const grid=document.getElementById('accountsGrid');
+  grid.querySelectorAll('.account-card').forEach(card=>{
+    card.addEventListener('dragstart',e=>{
+      _dragSrcId=parseInt(card.dataset.id);
+      card.classList.add('dragging');
+      e.dataTransfer.effectAllowed='move';
+    });
+    card.addEventListener('dragend',()=>{
+      card.classList.remove('dragging');
+      grid.querySelectorAll('.account-card').forEach(c=>c.classList.remove('drag-over'));
+    });
+    card.addEventListener('dragover',e=>{
+      e.preventDefault();
+      e.dataTransfer.dropEffect='move';
+      grid.querySelectorAll('.account-card').forEach(c=>c.classList.remove('drag-over'));
+      if(parseInt(card.dataset.id)!==_dragSrcId) card.classList.add('drag-over');
+    });
+    card.addEventListener('dragleave',()=>card.classList.remove('drag-over'));
+    card.addEventListener('drop',e=>{
+      e.preventDefault();
+      card.classList.remove('drag-over');
+      const targetId=parseInt(card.dataset.id);
+      if(_dragSrcId===null||_dragSrcId===targetId)return;
+      const srcIdx=accounts.findIndex(a=>a.id===_dragSrcId);
+      const tgtIdx=accounts.findIndex(a=>a.id===targetId);
+      if(srcIdx===-1||tgtIdx===-1)return;
+      const [moved]=accounts.splice(srcIdx,1);
+      accounts.splice(tgtIdx,0,moved);
+      save('bt_acc',accounts);
+      renderAccounts();
+      _dragSrcId=null;
+    });
+  });
 }
 function toggleAccEdit(id){
   const panel=document.getElementById('acc-edit-'+id);
