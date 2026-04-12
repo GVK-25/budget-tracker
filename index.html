@@ -283,6 +283,14 @@ textarea{resize:none;width:100%;}
 .acc-edit-btn:hover{border-color:var(--accent);color:var(--accent);}
 .acc-del-btn{background:none;border:2px solid var(--border);color:var(--text2);font-size:.66rem;padding:3px 7px;border-radius:8px;cursor:pointer;transition:all .18s;}
 .acc-del-btn:hover{border-color:var(--expense-color);color:var(--expense-color);}
+.acc-edit-panel{display:none;flex-direction:column;gap:6px;margin-top:10px;padding-top:10px;border-top:2px solid var(--border);}
+.acc-edit-panel.open{display:flex;}
+.acc-edit-panel label{font-size:.58rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:700;margin-bottom:1px;}
+.acc-edit-row-inline{display:flex;gap:5px;align-items:center;}
+.acc-edit-row-inline input{flex:1;font-size:.76rem;padding:5px 9px;min-width:0;}
+.acc-save-btn{background:var(--accent);color:#fff;border:2px solid var(--text);font-family:'Nunito',sans-serif;font-weight:800;font-size:.68rem;padding:5px 11px;border-radius:8px;cursor:pointer;white-space:nowrap;box-shadow:2px 2px 0 var(--text);transition:all .15s;width:100%;}
+.acc-save-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--text);}
+.acc-top-row{display:flex;justify-content:space-between;align-items:flex-start;}
 .add-account-row{display:flex;gap:8px;flex-wrap:wrap;align-items:flex-end;}
 .add-account-row input{flex:1;min-width:100px;}
 .transfer-pill{display:inline-flex;align-items:center;gap:4px;background:rgba(9,132,227,.1);border:1px solid rgba(9,132,227,.3);color:var(--transfer-color);border-radius:20px;padding:2px 8px;font-size:.63rem;}
@@ -1272,23 +1280,52 @@ function renderAccounts(){
   const grid=document.getElementById('accountsGrid');
   if(!accounts.length){grid.innerHTML='<div style="color:var(--text2);font-size:.8rem;padding:20px">No accounts yet.</div>';return;}
   grid.innerHTML=accounts.map(a=>`
-    <div class="account-card">
-      <div class="account-icon">${a.icon||'💳'}</div>
-      <div class="account-name">${a.name}</div>
-      <div class="account-balance" id="acc-bal-${a.id}" style="color:${a.balance<0?'var(--expense-color)':'var(--accent2)'}">${fmt(a.balance)}</div>
-      <div class="account-edit-row">
-        <input type="number" id="acc-inp-${a.id}" value="${a.balance}" min="0" step="0.01" style="font-size:.75rem">
-        <button class="acc-edit-btn" onclick="updateAccountBalance(${a.id})">Set</button>
-        <button class="acc-del-btn" onclick="deleteAccount(${a.id})">✕</button>
+    <div class="account-card" id="acc-card-${a.id}">
+      <div class="acc-top-row">
+        <div>
+          <div class="account-icon">${a.icon||'💳'}</div>
+          <div class="account-name">${a.name}</div>
+        </div>
+        <div style="display:flex;gap:5px;align-items:flex-start">
+          <button class="acc-edit-btn" onclick="toggleAccEdit(${a.id})" title="Edit account">✏️</button>
+          <button class="acc-del-btn" onclick="deleteAccount(${a.id})" title="Delete">✕</button>
+        </div>
+      </div>
+      <div class="account-balance" id="acc-bal-${a.id}" style="color:${a.balance<0?'var(--expense-color)':'var(--accent2)'};margin-top:6px">${fmt(a.balance)}</div>
+      <div class="acc-edit-panel" id="acc-edit-${a.id}">
+        <div>
+          <label>Emoji / Icon</label>
+          <input type="text" id="acc-icon-${a.id}" value="${a.icon||'💳'}" placeholder="💳" style="width:70px;text-align:center;font-size:1.1rem">
+        </div>
+        <div>
+          <label>Account Name</label>
+          <input type="text" id="acc-name-${a.id}" value="${a.name}" placeholder="Account name">
+        </div>
+        <div>
+          <label>Balance (₹)</label>
+          <input type="number" id="acc-inp-${a.id}" value="${a.balance}" step="0.01">
+        </div>
+        <button class="acc-save-btn" onclick="saveAccountEdit(${a.id})">💾 Save Changes</button>
       </div>
     </div>`).join('');
   populateAccountDropdowns();
 }
-function updateAccountBalance(id){
-  const val=parseFloat(document.getElementById('acc-inp-'+id).value);
-  if(isNaN(val))return;
+function toggleAccEdit(id){
+  const panel=document.getElementById('acc-edit-'+id);
+  panel.classList.toggle('open');
+}
+function saveAccountEdit(id){
   const acc=accounts.find(a=>a.id===id);
-  if(acc){acc.balance=val;save('bt_acc',accounts);renderAccounts();showToast('Balance updated!');}
+  if(!acc)return;
+  const newIcon=document.getElementById('acc-icon-'+id).value.trim()||'💳';
+  const newName=document.getElementById('acc-name-'+id).value.trim();
+  const newBal=parseFloat(document.getElementById('acc-inp-'+id).value);
+  if(!newName){showToast('Name cannot be empty',true);return;}
+  if(isNaN(newBal)){showToast('Enter a valid balance',true);return;}
+  acc.icon=newIcon;acc.name=newName;acc.balance=newBal;
+  save('bt_acc',accounts);
+  renderAccounts();
+  showToast(`"${newName}" updated!`);
 }
 function addAccount(){
   const icon=document.getElementById('newAccIcon').value.trim()||'💳';
@@ -1951,7 +1988,8 @@ Object.assign(window,{
   onRowCheck,toggleSelectAll,deleteSelected,clearSelection,
   openImportModal,closeImportModal,onImportDrop,onImportFile,confirmImport,
   exportCSV,addTransaction,onTxTypeChange,updateSubcategories,updateEditSubcategories,
-  addAccount,deleteAccount,updateAccountBalance,doTransfer,populateAccountDropdowns,
+  addAccount,deleteAccount,doTransfer,populateAccountDropdowns,
+  toggleAccEdit,saveAccountEdit,
   addGoal,deleteGoal,renderGoals,renderGoalProgress,
   renderRecurring,applyRecurring,deleteRecurring,
   renderTable,renderAccounts,renderAnalytics,setAnalyticsView,
