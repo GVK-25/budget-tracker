@@ -972,6 +972,10 @@ tr:hover td{background:var(--surface2);}
         <div class="field"><label>Category</label><select id="editCategory" onchange="updateEditSubcategories()"></select></div>
         <div class="field"><label>Sub-Category</label><select id="editSubcategory"></select></div>
       </div>
+      <div class="field" style="margin-bottom:9px">
+        <label>Account</label>
+        <select id="editAccount"></select>
+      </div>
     </div>
     <!-- Transfer-specific fields -->
     <div id="editTransferFields" style="display:none">
@@ -1110,8 +1114,15 @@ function setSyncStatus(state){
   else{dot.className='sync-dot';dot.style.background='var(--danger)';lbl.textContent='Sync error';}
 }
 
-function fmt(n){return (n<0?'-':'')+CURRENCY+Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});}
-function fmtShort(n){return CURRENCY+Math.round(Math.abs(n)).toLocaleString('en-IN');}
+function fmt(n){
+  const abs=Math.abs(n).toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (n<0?'-':'')+CURRENCY+abs;
+}
+function fmtShort(n){
+  const abs=Math.abs(n);
+  const str=abs>=1000?Math.round(abs).toLocaleString('en-IN'):abs.toLocaleString('en-IN',{minimumFractionDigits:2,maximumFractionDigits:2});
+  return (n<0?'-':'')+CURRENCY+str;
+}
 function today(){return new Date().toISOString().split('T')[0];}
 
 /* ── LOGIN ───────────────────────────────────────────────────────────────────── */
@@ -1595,6 +1606,10 @@ function openEditModal(id){
     document.getElementById('editCategory').value=t.category;
     updateEditSubcategories();
     document.getElementById('editSubcategory').value=t.subcategory;
+    // Populate account dropdown
+    const accOptions=accounts.map(a=>`<option value="${a.id}">${a.icon||'💳'} ${a.name}</option>`).join('');
+    document.getElementById('editAccount').innerHTML=accOptions;
+    document.getElementById('editAccount').value=t.accountId;
   }
   document.getElementById('editModal').classList.add('open');
 }
@@ -1630,12 +1645,15 @@ function saveEdit(){
   } else {
     const category=document.getElementById('editCategory').value;
     const subcategory=document.getElementById('editSubcategory').value;
-    // Reverse old balance effect
+    const newAccountId=parseInt(document.getElementById('editAccount').value);
+    // Reverse old balance effect on OLD account
     const oldAcc=accounts.find(a=>a.id===old.accountId);
     if(oldAcc){if(old.category==='Income')oldAcc.balance-=old.amount;else oldAcc.balance+=old.amount;}
-    // Apply new balance effect
-    if(oldAcc){if(category==='Income')oldAcc.balance+=amount;else oldAcc.balance-=amount;save('bt_acc',accounts);}
-    transactions[idx]={...old,date,amount,category,subcategory,notes};
+    // Apply new balance effect on NEW account (may be same or different)
+    const newAcc=accounts.find(a=>a.id===newAccountId);
+    if(newAcc){if(category==='Income')newAcc.balance+=amount;else newAcc.balance-=amount;}
+    save('bt_acc',accounts);
+    transactions[idx]={...old,date,amount,category,subcategory,notes,accountId:newAccountId};
   }
   save('bt_tx',transactions);
   updateSummary();renderTable();renderAccounts();
@@ -1755,10 +1773,10 @@ function renderTable(){
     const ds=d.toLocaleDateString('en-IN',{day:'2-digit',month:'short',year:'numeric'});
     const isT=t.isTransfer;
     const cls=isT?'amount-transfer':t.category==='Income'?'amount-income':'amount-expense';
-    const sign=isT?'↔':t.category==='Income'?'+':'-';
+    const sign=isT?'↔ ':t.category==='Income'?'+ ':'− ';
     const rb=runBal[t.id]||0;
     const accName=isT?`${accMap[t.fromAccount]?.name||'?'} → ${accMap[t.toAccount]?.name||'?'}`:(accMap[t.accountId]?.name||'—');
-    const rb2=`<span class="run-bal" style="color:${rb>=0?'var(--income-color)':'var(--expense-color)'}">${rb>=0?'+':'-'}${fmt(rb)}</span>`;
+    const rb2=`<span class="run-bal" style="color:${rb>=0?'var(--income-color)':'var(--expense-color)'}">${rb>=0?'+ ':'− '}${fmt(Math.abs(rb))}</span>`;
     const recurBadge=t.recurring&&t.recurring!=='none'?`<span class="recur-badge">↺${t.recurring}</span>`:'';
     return `<tr data-id="${t.id}">
       <td class="check-col"><input type="checkbox" class="row-check" onchange="onRowCheck(this)" data-id="${t.id}"></td>
@@ -1818,7 +1836,7 @@ function renderGoalProgress(){
 function renderRecurring(){
   const el=document.getElementById('recurList');
   if(!recurringTxs.length){el.innerHTML='<div class="form-card" style="color:var(--text2);font-size:.78rem;text-align:center;padding:28px">No recurring transactions yet.</div>';return;}
-  el.innerHTML=recurringTxs.map(r=>`<div class="recur-item"><div class="recur-info"><div class="recur-name">${r.subcategory} <span class="recur-badge">↺${r.frequency}</span></div><div class="recur-meta">${r.category}${r.notes?' · '+r.notes:''}</div></div><div class="recur-amount">-${fmt(r.amount)}</div><div class="recur-actions"><button class="edit-btn" onclick="applyRecurring(${r.id})">+ Add</button><button class="delete-btn" onclick="deleteRecurring(${r.id})">del</button></div></div>`).join('');
+  el.innerHTML=recurringTxs.map(r=>`<div class="recur-item"><div class="recur-info"><div class="recur-name">${r.subcategory} <span class="recur-badge">↺${r.frequency}</span></div><div class="recur-meta">${r.category}${r.notes?' · '+r.notes:''}</div></div><div class="recur-amount">− ${fmt(r.amount)}</div><div class="recur-actions"><button class="edit-btn" onclick="applyRecurring(${r.id})">+ Add</button><button class="delete-btn" onclick="deleteRecurring(${r.id})">del</button></div></div>`).join('');
 }
 function applyRecurring(id){
   const r=recurringTxs.find(r=>r.id===id);if(!r)return;
@@ -2023,7 +2041,7 @@ function renderCategoryView(txs){
   destroyChart('sBar');
   charts['sBar']=new Chart(document.getElementById('chart-subBar'),{type:'bar',data:{labels:ss.map(e=>e[0]),datasets:[{label:'Amount',data:ss.map(e=>e[1]),backgroundColor:ss.map((_,i)=>getChartColors()[i%10]),borderRadius:6,borderSkipped:false}]},options:{responsive:true,maintainAspectRatio:false,indexAxis:'y',...hd}});
   const top=[...exp].sort((a,b)=>b.amount-a.amount).slice(0,10);const mx=top[0]?.amount||1;
-  document.getElementById('topTxList').innerHTML=!top.length?'<div style="color:var(--text2);font-size:.76rem;padding:14px;text-align:center">No data</div>':top.map((t,i)=>`<div class="top-item"><div class="top-rank">#${i+1}</div><div class="top-name"><span>${t.subcategory}</span> <span style="color:var(--text2);font-size:.66rem">${new Date(t.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})} · ${t.notes||t.category}</span></div><div class="top-bar-wrap"><div class="top-bar" style="width:${(t.amount/mx*100).toFixed(1)}%"></div></div><div class="top-amount">-${fmt(t.amount)}</div></div>`).join('');
+  document.getElementById('topTxList').innerHTML=!top.length?'<div style="color:var(--text2);font-size:.76rem;padding:14px;text-align:center">No data</div>':top.map((t,i)=>`<div class="top-item"><div class="top-rank">#${i+1}</div><div class="top-name"><span>${t.subcategory}</span> <span style="color:var(--text2);font-size:.66rem">${new Date(t.date).toLocaleDateString('en-IN',{day:'2-digit',month:'short'})} · ${t.notes||t.category}</span></div><div class="top-bar-wrap"><div class="top-bar" style="width:${(t.amount/mx*100).toFixed(1)}%"></div></div><div class="top-amount">− ${fmt(t.amount)}</div></div>`).join('');
 }
 function renderAccountsView(txs){
   const accMap={};accounts.forEach(a=>{accMap[a.id]={name:a.name,icon:a.icon,spend:0};});
