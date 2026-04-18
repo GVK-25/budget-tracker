@@ -4,6 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Budget Tracker</title>
+<!-- Apply saved theme instantly to avoid flash of wrong theme -->
+<script>
+  (function(){
+    var t=localStorage.getItem('bt_theme');
+    if(t)document.documentElement.setAttribute('data-theme',t);
+  })();
+</script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
@@ -1163,7 +1170,7 @@ async function completeLogin(userInfo,fbUser){
       av.innerHTML=`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
     }
     // Load ALL Firestore keys in parallel (much faster than sequential)
-    const keys=['bt_tx','bt_acc','bt_goals','bt_recur','bt_sub'];
+    const keys=['bt_tx','bt_acc','bt_goals','bt_recur','bt_sub','bt_theme'];
     const results=await Promise.all(keys.map(k=>_loadCloud(fbUser.uid,k)));
     const keysToUpload=[];
     keys.forEach((k,i)=>{
@@ -1179,6 +1186,9 @@ async function completeLogin(userInfo,fbUser){
     recurringTxs =JSON.parse(localStorage.getItem('bt_recur')||'[]');
     accounts     =JSON.parse(localStorage.getItem('bt_acc')||JSON.stringify([{id:1,icon:'🏦',name:'Bank Account',balance:0},{id:2,icon:'👛',name:'Wallet',balance:0},{id:3,icon:'💵',name:'Cash',balance:0}]));
     SUBCATEGORIES=JSON.parse(localStorage.getItem('bt_sub')||JSON.stringify(DEFAULT_SUBCATEGORIES));
+    // Reload theme from cloud
+    const savedTheme=localStorage.getItem('bt_theme');
+    if(savedTheme)currentTheme=savedTheme;
     setSyncStatus('synced');
 
     // Real-time listener for changes from OTHER devices
@@ -1203,6 +1213,7 @@ async function completeLogin(userInfo,fbUser){
             if(k==='bt_goals')goals=v;
             if(k==='bt_recur')recurringTxs=v;
             if(k==='bt_sub'){SUBCATEGORIES=v;rebuildCategoryDropdowns();}
+            if(k==='bt_theme'){currentTheme=v;setTheme(v);}
             changed=true;
           }
         });
