@@ -7,8 +7,7 @@
 <!-- Apply saved theme instantly to avoid flash of wrong theme -->
 <script>
   (function(){
-    var t=localStorage.getItem('bt_theme');
-    if(t)document.documentElement.setAttribute('data-theme',t);
+    try{var t=JSON.parse(localStorage.getItem('bt_theme'));if(t)document.documentElement.setAttribute('data-theme',t);}catch(e){}
   })();
 </script>
 <link href="https://fonts.googleapis.com/css2?family=Nunito:wght@400;600;700;800;900&family=Fira+Code:wght@300;400;500&display=swap" rel="stylesheet">
@@ -178,9 +177,13 @@ main{max-width:1160px;margin:0 auto;padding:24px 18px;}
   border:2px solid var(--border);
   border-radius:18px;padding:4px;overflow-x:auto;width:fit-content;max-width:100%;
 }
-.tab-btn{background:none;border:2px solid transparent;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:800;font-size:.78rem;padding:6px 16px;border-radius:13px;cursor:pointer;transition:all .18s;white-space:nowrap;}
+.tab-btn{background:none;border:2px solid transparent;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:800;font-size:.78rem;padding:6px 14px 6px 8px;border-radius:13px;cursor:pointer;transition:all .18s;white-space:nowrap;display:flex;align-items:center;gap:4px;}
 .tab-btn:hover{color:var(--text);background:var(--surface2);}
 .tab-btn.active{background:var(--accent);color:#fff;border-color:transparent;transform:translateY(-1px);box-shadow:0 3px 0 rgba(0,0,0,0.15);}
+.tab-btn.tab-drag-over{outline:2px dashed var(--accent);outline-offset:1px;}
+.tab-drag{font-size:.72rem;color:var(--text2);opacity:.5;cursor:grab;user-select:none;line-height:1;}
+.tab-btn.active .tab-drag{color:#fff;opacity:.7;}
+.tab-btn:hover .tab-drag{opacity:1;}
 .tab-panel{display:none;}.tab-panel.active{display:block;}
 
 /* ─── MONTH BAR ─── */
@@ -580,17 +583,24 @@ tr:hover td{background:var(--surface2);}
   .theme-popup{right:auto;left:0;}
 }
 
-/* ── SMALL MOBILE (max 420px) ── */
+/* ── WISHLIST ── */
+.wish-buy-btn{background:var(--accent2);color:#fff;border:2px solid var(--text);font-family:'Nunito',sans-serif;font-weight:800;font-size:.7rem;padding:6px 12px;border-radius:8px;cursor:pointer;box-shadow:2px 2px 0 var(--text);transition:all .15s;}
+.wish-buy-btn:hover{transform:translate(-1px,-1px);box-shadow:3px 3px 0 var(--text);}
+.wish-del-btn{background:none;border:2px solid var(--border);color:var(--text2);font-size:.7rem;padding:6px 9px;border-radius:8px;cursor:pointer;transition:all .15s;}
+.wish-del-btn:hover{border-color:var(--expense-color);color:var(--expense-color);}
+
+/* Fund modal */
+#wishFundModal .modal{max-width:360px;}
+
 @media(max-width:420px){
   .accounts-grid{grid-template-columns:1fr;}
   .summary-grid{grid-template-columns:1fr;}
   .insights-grid{grid-template-columns:1fr;}
-  .tab-btn{font-size:.65rem;padding:4px 9px;}
+  .tab-btn{font-size:.65rem;padding:4px 7px;}
   .card-amount{font-size:1.3rem;}
   header{flex-wrap:nowrap;overflow-x:auto;}
   .header-actions{flex-wrap:nowrap;min-width:0;}
   .hbtn{white-space:nowrap;}
-  /* Stack form rows */
   .add-account-row{flex-direction:column;}
   .add-account-row input,.add-account-row button{width:100%;}
 }
@@ -621,6 +631,7 @@ tr:hover td{background:var(--surface2);}
     <button class="hbtn" onclick="openCatModal()">⚙ Categories</button>
     <button class="hbtn" id="exportBtn" onclick="exportCSV()">↓ CSV</button>
     <button class="hbtn" id="importBtn" onclick="openImportModal()">↑ Import</button>
+    <button class="hbtn" onclick="openSummaryReport()" style="background:var(--accent3);color:var(--text);border-color:var(--accent3)">📊 Summary</button>
     <span class="currency-badge">₹ INR</span>
     <div class="theme-picker-wrap">
       <button class="theme-picker-btn" onclick="toggleThemePicker()" id="themePickerBtn">
@@ -688,13 +699,14 @@ tr:hover td{background:var(--surface2);}
 </header>
 
 <main>
-  <div class="tab-nav">
-    <button class="tab-btn active" onclick="switchTab('dashboard')">Dashboard</button>
-    <button class="tab-btn" onclick="switchTab('accounts')">Accounts</button>
-    <button class="tab-btn" onclick="switchTab('analytics')">Analytics</button>
-    <button class="tab-btn" onclick="switchTab('goals')">Goals</button>
-    <button class="tab-btn" onclick="switchTab('recurring')">Recurring</button>
-    <button class="tab-btn" onclick="switchTab('log')">Log</button>
+  <div class="tab-nav" id="tabNav">
+    <button class="tab-btn active" data-tab="dashboard" draggable="true"><span class="tab-drag">⠿</span>Dashboard</button>
+    <button class="tab-btn" data-tab="accounts" draggable="true"><span class="tab-drag">⠿</span>Accounts</button>
+    <button class="tab-btn" data-tab="analytics" draggable="true"><span class="tab-drag">⠿</span>Analytics</button>
+    <button class="tab-btn" data-tab="goals" draggable="true"><span class="tab-drag">⠿</span>Goals</button>
+    <button class="tab-btn" data-tab="recurring" draggable="true"><span class="tab-drag">⠿</span>Recurring</button>
+    <button class="tab-btn" data-tab="wishlist" draggable="true"><span class="tab-drag">⠿</span>Wishlist</button>
+    <button class="tab-btn" data-tab="log" draggable="true"><span class="tab-drag">⠿</span>Log</button>
   </div>
 
   <!-- ===== DASHBOARD ===== -->
@@ -945,7 +957,83 @@ tr:hover td{background:var(--surface2);}
       <div id="emptyState" class="empty-state"><span>📋</span>No transactions found.</div>
     </div>
   </div>
+
+  <!-- WISHLIST TAB -->
+  <div class="tab-panel" id="tab-wishlist">
+    <!-- Add form — compact single row -->
+    <div class="form-card" style="margin-bottom:20px">
+      <div class="section-title">Add to Wishlist</div>
+      <div class="form-row">
+        <div class="field"><label>Item Name</label><input type="text" id="wishName" placeholder="e.g. Sony WH-1000XM5"></div>
+        <div class="field"><label>Amount (₹)</label><input type="number" id="wishAmount" min="0" step="0.01" placeholder="0.00"></div>
+        <div class="field"><label>URL (optional)</label><input type="text" id="wishUrl" placeholder="https://..."></div>
+      </div>
+      <button class="btn" style="margin-top:4px;width:auto;padding:9px 28px" onclick="addWish()">+ Add</button>
+    </div>
+
+    <!-- Wishlist table -->
+    <div class="log-card">
+      <div class="log-header">
+        <span style="font-family:'Nunito',sans-serif;font-weight:800;font-size:.88rem">My Wishlist</span>
+        <span id="wStatSummary" style="font-size:.72rem;color:var(--text2)"></span>
+      </div>
+      <div id="wishList"></div>
+      <div id="wishEmpty" class="empty-state" style="display:none"><span>🛍️</span>Your wishlist is empty. Add something above!</div>
+    </div>
+  </div>
 </main>
+
+<!-- SUMMARY REPORT MODAL -->
+<div class="modal-backdrop" id="summaryModal">
+  <div class="modal wide" style="max-width:600px;max-height:92vh;overflow-y:auto" id="summaryModalInner">
+    <div class="modal-title">
+      📊 Monthly Summary
+      <div style="display:flex;gap:6px;align-items:center">
+        <select id="summaryMonth" onchange="renderSummaryReport()" style="font-size:.72rem;padding:4px 9px;border-radius:8px"></select>
+        <select id="summaryYear" onchange="renderSummaryReport()" style="font-size:.72rem;padding:4px 9px;border-radius:8px"></select>
+        <button class="modal-close" onclick="closeSummaryReport()">✕</button>
+      </div>
+    </div>
+    <div id="summaryReportBody"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" onclick="printSummary()" style="flex:1">🖨️ Save as PDF</button>
+      <button class="btn-secondary" onclick="whatsappSummary()" style="flex:1">💬 Share via WhatsApp</button>
+      <button class="btn-secondary" onclick="copySummary()" style="flex:1">📋 Copy Text</button>
+    </div>
+  </div>
+</div>
+
+<!-- PRINT STYLES -->
+<style id="printStyles">
+@media print{
+  body > *:not(#summaryPrintArea){display:none!important;}
+  #summaryPrintArea{display:block!important;position:fixed;inset:0;background:#fff;z-index:99999;padding:24px;}
+  #summaryPrintArea *{color:#000!important;border-color:#ccc!important;background:transparent!important;}
+}
+#summaryPrintArea{display:none;}
+</style>
+<div id="summaryPrintArea"></div>
+
+<!-- WISH BUY MODAL -->
+<div class="modal-backdrop" id="wishBuyModal">
+  <div class="modal" style="max-width:440px">
+    <div class="modal-title">🛒 Buy This Item <button class="modal-close" onclick="closeWishBuyModal()">✕</button></div>
+    <input type="hidden" id="buyWishId">
+    <div id="buyWishInfo" style="background:var(--surface2);border-radius:12px;padding:12px;margin-bottom:14px;"></div>
+
+    <!-- Account selection with checkboxes -->
+    <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:700;margin-bottom:8px">Select Account(s) to Pay From</div>
+    <div id="buyAccountCheckList" style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px;max-height:220px;overflow-y:auto;"></div>
+
+    <!-- Combined balance summary -->
+    <div id="buyCombinedSummary" style="border-radius:12px;padding:12px 14px;font-size:.8rem;margin-bottom:14px;"></div>
+
+    <div class="modal-actions">
+      <button class="btn-secondary" onclick="closeWishBuyModal()">Cancel</button>
+      <button class="btn" id="buyConfirmBtn" onclick="confirmBuyWish()">✅ Mark as Bought</button>
+    </div>
+  </div>
+</div>
 
 <!-- CATEGORY MODAL -->
 <div class="modal-backdrop" id="catModal">
@@ -1059,7 +1147,7 @@ let transactions=JSON.parse(localStorage.getItem('bt_tx')||'[]');
 let goals=JSON.parse(localStorage.getItem('bt_goals')||'[]');
 let recurringTxs=JSON.parse(localStorage.getItem('bt_recur')||'[]');
 let accounts=JSON.parse(localStorage.getItem('bt_acc')||JSON.stringify([{id:1,icon:'🏦',name:'Bank Account',balance:0},{id:2,icon:'👛',name:'Wallet',balance:0},{id:3,icon:'💵',name:'Cash',balance:0}]));
-let currentTheme=localStorage.getItem('bt_theme')||'colorful';
+let currentTheme=(()=>{try{return JSON.parse(localStorage.getItem('bt_theme'))||'colorful';}catch(e){return 'colorful';}})();
 let isDark=['midnight','sunset'].includes(currentTheme);
 let currentUser=null;
 let _unsubscribe=null;
@@ -1170,7 +1258,7 @@ async function completeLogin(userInfo,fbUser){
       av.innerHTML=`<img src="${fbUser.photoURL}" style="width:22px;height:22px;border-radius:50%;object-fit:cover">`;
     }
     // Load ALL Firestore keys in parallel (much faster than sequential)
-    const keys=['bt_tx','bt_acc','bt_goals','bt_recur','bt_sub','bt_theme'];
+    const keys=['bt_tx','bt_acc','bt_goals','bt_recur','bt_sub','bt_theme','bt_wish'];
     const results=await Promise.all(keys.map(k=>_loadCloud(fbUser.uid,k)));
     const keysToUpload=[];
     keys.forEach((k,i)=>{
@@ -1186,8 +1274,9 @@ async function completeLogin(userInfo,fbUser){
     recurringTxs =JSON.parse(localStorage.getItem('bt_recur')||'[]');
     accounts     =JSON.parse(localStorage.getItem('bt_acc')||JSON.stringify([{id:1,icon:'🏦',name:'Bank Account',balance:0},{id:2,icon:'👛',name:'Wallet',balance:0},{id:3,icon:'💵',name:'Cash',balance:0}]));
     SUBCATEGORIES=JSON.parse(localStorage.getItem('bt_sub')||JSON.stringify(DEFAULT_SUBCATEGORIES));
+    wishlist     =JSON.parse(localStorage.getItem('bt_wish')||'[]');
     // Reload theme from cloud
-    const savedTheme=localStorage.getItem('bt_theme');
+    const savedTheme=(()=>{try{return JSON.parse(localStorage.getItem('bt_theme'));}catch(e){return null;}})();
     if(savedTheme)currentTheme=savedTheme;
     setSyncStatus('synced');
 
@@ -1214,6 +1303,7 @@ async function completeLogin(userInfo,fbUser){
             if(k==='bt_recur')recurringTxs=v;
             if(k==='bt_sub'){SUBCATEGORIES=v;rebuildCategoryDropdowns();}
             if(k==='bt_theme'){currentTheme=v;setTheme(v);}
+            if(k==='bt_wish'){wishlist=v;}
             changed=true;
           }
         });
@@ -1302,17 +1392,61 @@ function toggleTheme(){/* kept for compat */}
 
 /* ---- TABS ---- */
 function switchTab(name){
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.toggle('active',b.dataset.tab===name));
   document.querySelectorAll('.tab-panel').forEach(p=>p.classList.remove('active'));
-  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
   document.getElementById('tab-'+name).classList.add('active');
-  const labels={dashboard:'Dashboard',accounts:'Accounts',analytics:'Analytics',goals:'Goals',recurring:'Recurring',log:'Log'};
-  document.querySelectorAll('.tab-btn').forEach(b=>{if(b.textContent.trim()===labels[name])b.classList.add('active');});
   if(name==='analytics')renderAnalytics();
   if(name==='goals')renderGoals();
   if(name==='recurring')renderRecurring();
   if(name==='accounts')renderAccounts();
+  if(name==='wishlist')renderWishlist();
   if(name==='log'){populateYearDropdowns();renderTable();}
 }
+
+let _tabDragSrc=null;
+function initTabDrag(){
+  const nav=document.getElementById('tabNav');if(!nav)return;
+  // Remove old listener if any, use delegation for clicks
+  nav.onclick=e=>{
+    const btn=e.target.closest('.tab-btn');
+    if(btn&&!_tabDragSrc)switchTab(btn.dataset.tab);
+  };
+  nav.querySelectorAll('.tab-btn').forEach(btn=>{
+    btn.addEventListener('dragstart',e=>{
+      _tabDragSrc=btn;e.dataTransfer.effectAllowed='move';
+      setTimeout(()=>btn.style.opacity='0.4',0);
+    });
+    btn.addEventListener('dragend',()=>{
+      btn.style.opacity='';
+      _tabDragSrc=null;
+      nav.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('tab-drag-over'));
+    });
+    btn.addEventListener('dragover',e=>{
+      e.preventDefault();e.dataTransfer.dropEffect='move';
+      if(btn!==_tabDragSrc){nav.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('tab-drag-over'));btn.classList.add('tab-drag-over');}
+    });
+    btn.addEventListener('dragleave',()=>btn.classList.remove('tab-drag-over'));
+    btn.addEventListener('drop',e=>{
+      e.preventDefault();btn.classList.remove('tab-drag-over');
+      if(!_tabDragSrc||_tabDragSrc===btn)return;
+      const btns=[...nav.querySelectorAll('.tab-btn')];
+      const srcIdx=btns.indexOf(_tabDragSrc),tgtIdx=btns.indexOf(btn);
+      if(srcIdx<tgtIdx)btn.after(_tabDragSrc);else btn.before(_tabDragSrc);
+      const order=[...nav.querySelectorAll('.tab-btn')].map(b=>b.dataset.tab);
+      localStorage.setItem('bt_taborder',JSON.stringify(order));
+      _tabDragSrc=null;
+    });
+  });
+}
+function applyTabOrder(){
+  try{
+    const order=JSON.parse(localStorage.getItem('bt_taborder'));
+    if(!order||!order.length)return;
+    const nav=document.getElementById('tabNav');
+    order.forEach(tab=>{const btn=nav.querySelector(`[data-tab="${tab}"]`);if(btn)nav.appendChild(btn);});
+  }catch(e){}
+}
+
 
 /* ---- ACCOUNTS ---- */
 function renderAccounts(){
@@ -1733,6 +1867,7 @@ function deleteSelected(){
   showToast(`${ids.length} transaction${ids.length>1?'s':''} deleted.`);
 }
 document.getElementById('editModal').addEventListener('click',e=>{if(e.target===document.getElementById('editModal'))closeEditModal();});
+document.getElementById('summaryModal').addEventListener('click',e=>{if(e.target===document.getElementById('summaryModal'))closeSummaryReport();});
 
 /* ---- MEMO ---- */
 function saveMemo(){localStorage.setItem('bt_memo',document.getElementById('memoText').value);}
@@ -2089,7 +2224,307 @@ function deleteCat(cat){
 }
 document.getElementById('catModal').addEventListener('click',e=>{if(e.target===document.getElementById('catModal'))closeCatModal();});
 
-/* ---- TOAST ---- */
+/* ---- WISHLIST ---- */
+let wishlist=[];
+
+function populateWishAccountDropdowns(){}
+
+function avgMonthlySavings(){
+  if(!transactions.length)return 0;
+  const inc=transactions.filter(t=>t.category==='Income').reduce((s,t)=>s+t.amount,0);
+  const exp=transactions.filter(t=>t.category!=='Income'&&!t.isTransfer).reduce((s,t)=>s+t.amount,0);
+  const dates=transactions.map(t=>new Date(t.date));
+  const minD=new Date(Math.min(...dates)),maxD=new Date(Math.max(...dates));
+  const months=Math.max(1,((maxD-minD)/(1000*60*60*24*30.5)));
+  return Math.max(0,(inc-exp)/months);
+}
+
+function renderWishlist(){
+  const list=document.getElementById('wishList');
+  const empty=document.getElementById('wishEmpty');
+  const summary=document.getElementById('wStatSummary');
+  if(!list)return;
+
+  const active=wishlist.filter(w=>!w.purchased);
+  const total=active.reduce((s,w)=>s+w.amount,0);
+  if(summary)summary.textContent=active.length?`${active.length} item${active.length>1?'s':''} · ${fmt(total)} total`:'';
+
+  if(!wishlist.length){list.innerHTML='';empty.style.display='';return;}
+  empty.style.display='none';
+
+  list.innerHTML=wishlist.map(w=>{
+    const urlDisplay=w.url?`<a href="${w.url}" target="_blank" rel="noopener" style="color:var(--accent2);font-size:.7rem;text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:160px;display:inline-block" title="${w.url}">${w.url.replace(/^https?:\/\/(www\.)?/,'').substring(0,28)}${w.url.length>35?'…':''}</a>`:'';
+    return`<div style="display:flex;align-items:center;gap:12px;padding:12px 18px;border-bottom:1px solid var(--border);${w.purchased?'opacity:.5;':''}">
+      <div style="flex:1;min-width:0">
+        <div style="font-family:'Nunito',sans-serif;font-weight:800;font-size:.84rem;${w.purchased?'text-decoration:line-through;':''}">${w.name}</div>
+        ${urlDisplay?`<div style="margin-top:2px">${urlDisplay}</div>`:''}
+      </div>
+      <div style="font-family:'Nunito',sans-serif;font-weight:900;font-size:.9rem;color:var(--balance-color);flex-shrink:0">${fmt(w.amount)}</div>
+      ${!w.purchased?`<button class="wish-buy-btn" style="flex-shrink:0;padding:5px 12px;font-size:.68rem" onclick="openWishBuyModal(${w.id})">🛒 Buy</button>`
+        :`<span style="font-size:.7rem;color:var(--income-color);font-weight:700;font-family:'Nunito',sans-serif;flex-shrink:0">✅ Bought</span>`}
+      <button class="wish-del-btn" onclick="deleteWish(${w.id})" style="flex-shrink:0">✕</button>
+    </div>`;
+  }).join('');
+}
+
+function addWish(){
+  const name=document.getElementById('wishName').value.trim();
+  const amount=parseFloat(document.getElementById('wishAmount').value);
+  const url=document.getElementById('wishUrl').value.trim();
+  if(!name){showToast('Enter an item name!',true);return;}
+  if(isNaN(amount)||amount<=0){showToast('Enter a valid amount!',true);return;}
+  wishlist.unshift({id:Date.now(),name,amount,url,purchased:false,addedOn:today()});
+  save('bt_wish',wishlist);
+  renderWishlist();
+  document.getElementById('wishName').value='';
+  document.getElementById('wishAmount').value='';
+  document.getElementById('wishUrl').value='';
+  showToast(`"${name}" added!`);
+}
+
+function deleteWish(id){
+  if(!confirm('Remove this wish?'))return;
+  wishlist=wishlist.filter(w=>w.id!==id);
+  save('bt_wish',wishlist);renderWishlist();showToast('Removed.');
+}
+
+function openWishBuyModal(id,preChecked=[]){
+  const w=wishlist.find(w=>w.id===id);if(!w)return;
+  document.getElementById('buyWishId').value=id;
+  document.getElementById('buyWishInfo').innerHTML=
+    `<div style="font-family:'Nunito',sans-serif;font-weight:800;font-size:.9rem;margin-bottom:4px">${w.name}</div>`+
+    `<div style="color:var(--balance-color);font-family:'Nunito',sans-serif;font-weight:900;font-size:1.1rem">${fmt(w.amount)}</div>`;
+  const list=document.getElementById('buyAccountCheckList');
+  list.innerHTML=accounts.map(a=>{
+    const isPreChecked=preChecked.includes(a.id);
+    const canAlone=a.balance>=w.amount;
+    const afterBuy=a.balance-w.amount;
+    return`<label style="display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;cursor:pointer;border:2px solid ${isPreChecked?'var(--accent2)':'var(--border)'};background:var(--surface2)">
+      <input type="checkbox" class="buy-acc-chk" data-id="${a.id}" ${isPreChecked?'checked':''} onchange="updateBuyPreview(${w.id})"
+        style="width:16px;height:16px;accent-color:var(--accent);cursor:pointer">
+      <span style="font-size:.78rem;font-family:'Nunito',sans-serif;font-weight:700;flex:1">${a.icon||'💳'} ${a.name}</span>
+      <span style="font-size:.76rem;color:var(--text2)">${fmt(a.balance)}</span>
+      <span style="font-size:.68rem;font-weight:700;color:${canAlone?'var(--income-color)':'var(--expense-color)'}">${canAlone?`✅ ${fmt(afterBuy)} left`:`❌ -${fmt(w.amount-a.balance)}`}</span>
+    </label>`;
+  }).join('');
+  updateBuyPreview(w.id);
+  document.getElementById('wishBuyModal').classList.add('open');
+}
+
+function updateBuyPreview(wid){
+  const w=wishlist.find(w=>w.id===wid);if(!w)return;
+  const checked=[...document.querySelectorAll('.buy-acc-chk:checked')].map(el=>parseInt(el.dataset.id));
+  const selAccounts=accounts.filter(a=>checked.includes(a.id));
+  const combinedBal=selAccounts.reduce((s,a)=>s+a.balance,0);
+  const canAfford=combinedBal>=w.amount;
+  const el=document.getElementById('buyCombinedSummary');
+  if(!checked.length){
+    el.style.background='var(--surface2)';el.style.border='1px solid var(--border)';
+    el.innerHTML=`<span style="color:var(--text2);font-size:.78rem">Select at least one account</span>`;
+    document.getElementById('buyConfirmBtn').disabled=true;
+    document.getElementById('buyConfirmBtn').style.opacity='0.45';
+    return;
+  }
+  el.style.background=canAfford?'rgba(0,184,148,.07)':'rgba(255,92,53,.07)';
+  el.style.border=`1px solid ${canAfford?'rgba(0,184,148,.25)':'rgba(255,92,53,.25)'}`;
+  el.innerHTML=canAfford
+    ?`<div style="color:var(--income-color);font-family:'Nunito',sans-serif;font-weight:800;font-size:.82rem">✅ You can afford this!</div>`+
+      `<div style="color:var(--text2);font-size:.74rem;margin-top:3px">After buying: <strong style="color:var(--income-color)">${fmt(combinedBal-w.amount)}</strong> remaining</div>`
+    :`<div style="color:var(--expense-color);font-family:'Nunito',sans-serif;font-weight:800;font-size:.82rem">❌ Short ${fmt(w.amount-combinedBal)}</div>`+
+      `<div style="color:var(--text2);font-size:.74rem;margin-top:3px">Combined: ${fmt(combinedBal)} — need ${fmt(w.amount-combinedBal)} more</div>`;
+  document.getElementById('buyConfirmBtn').disabled=!canAfford;
+  document.getElementById('buyConfirmBtn').style.opacity=canAfford?'1':'0.45';
+}
+
+function closeWishBuyModal(){document.getElementById('wishBuyModal').classList.remove('open');}
+
+function confirmBuyWish(){
+  const id=parseInt(document.getElementById('buyWishId').value);
+  const w=wishlist.find(w=>w.id===id);if(!w)return;
+  const checked=[...document.querySelectorAll('.buy-acc-chk:checked')].map(el=>parseInt(el.dataset.id));
+  const selAccounts=accounts.filter(a=>checked.includes(a.id));
+  const combinedBal=selAccounts.reduce((s,a)=>s+a.balance,0);
+  if(combinedBal<w.amount){showToast('Not enough combined balance!',true);return;}
+  let remaining=w.amount;
+  const sorted=[...selAccounts].sort((a,b)=>b.balance-a.balance);
+  for(const acc of sorted){const deduct=Math.min(acc.balance,remaining);acc.balance-=deduct;remaining-=deduct;if(remaining<=0)break;}
+  save('bt_acc',accounts);
+  transactions.unshift({id:Date.now(),date:today(),amount:w.amount,category:'Expenses',subcategory:'Wishlist Purchase',notes:w.name,accountId:sorted[0].id});
+  save('bt_tx',transactions);
+  w.purchased=true;save('bt_wish',wishlist);
+  renderWishlist();renderAccounts();updateSummary();
+  closeWishBuyModal();
+  showToast(`🎉 Congrats on buying "${w.name}"!`);
+}
+
+// compat stubs
+function openWishFundModal(){}
+function closeWishFundModal(){}
+function confirmFundWish(){}
+function markWishPurchased(id){openWishBuyModal(id);}
+function openWishBuyModalFromCard(id){openWishBuyModal(id);}
+function updateCardAffordability(){}
+
+/* ---- SUMMARY REPORT ---- */
+function openSummaryReport(){
+  const now=new Date();
+  // Populate month/year selectors
+  const mSel=document.getElementById('summaryMonth');
+  const ySel=document.getElementById('summaryYear');
+  const months=['January','February','March','April','May','June','July','August','September','October','November','December'];
+  mSel.innerHTML=months.map((m,i)=>`<option value="${i}" ${i===now.getMonth()?'selected':''}>${m}</option>`).join('');
+  ySel.innerHTML='';
+  const years=new Set(transactions.map(t=>new Date(t.date).getFullYear()));
+  years.add(now.getFullYear());
+  [...years].sort((a,b)=>b-a).forEach(y=>ySel.innerHTML+=`<option value="${y}" ${y===now.getFullYear()?'selected':''}>${y}</option>`);
+  renderSummaryReport();
+  document.getElementById('summaryModal').classList.add('open');
+}
+function closeSummaryReport(){document.getElementById('summaryModal').classList.remove('open');}
+
+function getSummaryData(){
+  const month=parseInt(document.getElementById('summaryMonth').value);
+  const year=parseInt(document.getElementById('summaryYear').value);
+  const monthName=['January','February','March','April','May','June','July','August','September','October','November','December'][month];
+  const txs=transactions.filter(t=>{const d=new Date(t.date);return d.getMonth()===month&&d.getFullYear()===year&&!t.isTransfer;});
+  const income=txs.filter(t=>t.category==='Income').reduce((s,t)=>s+t.amount,0);
+  const expense=txs.filter(t=>t.category!=='Income').reduce((s,t)=>s+t.amount,0);
+  const savings=income-expense;
+  const savingsRate=income>0?Math.round((savings/income)*100):0;
+  // Category breakdown
+  const byCat={};
+  txs.filter(t=>t.category!=='Income').forEach(t=>{byCat[t.category]=(byCat[t.category]||0)+t.amount;});
+  const catSorted=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
+  // Top expenses
+  const topExp=[...txs].filter(t=>t.category!=='Income').sort((a,b)=>b.amount-a.amount).slice(0,5);
+  // Account balances
+  const accBals=accounts.map(a=>({name:a.name,icon:a.icon||'💳',balance:a.balance}));
+  return{month,year,monthName,txs,income,expense,savings,savingsRate,catSorted,topExp,accBals};
+}
+
+function renderSummaryReport(){
+  const d=getSummaryData();
+  const totalTx=d.txs.length;
+  const bar=(pct,color)=>`<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100,pct)}%;background:${color};border-radius:3px"></div></div>`;
+
+  const html=`
+  <div style="font-family:'Nunito',sans-serif">
+    <!-- Header -->
+    <div style="text-align:center;padding:12px 0 20px;border-bottom:2px solid var(--border);margin-bottom:18px">
+      <div style="font-size:1.4rem;font-weight:900;letter-spacing:-.02em">budget<span style="color:var(--accent)">.</span>tracker</div>
+      <div style="font-size:1rem;font-weight:700;margin-top:4px;color:var(--text2)">${d.monthName} ${d.year} · Financial Summary</div>
+    </div>
+
+    <!-- Big 3 stats -->
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
+      <div style="background:rgba(0,184,148,.08);border:2px solid rgba(0,184,148,.25);border-radius:14px;padding:14px;text-align:center">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Income</div>
+        <div style="font-size:1.2rem;font-weight:900;color:var(--income-color)">${fmt(d.income)}</div>
+        <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.txs.filter(t=>t.category==='Income').length} transactions</div>
+      </div>
+      <div style="background:rgba(255,92,53,.08);border:2px solid rgba(255,92,53,.25);border-radius:14px;padding:14px;text-align:center">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Expenses</div>
+        <div style="font-size:1.2rem;font-weight:900;color:var(--expense-color)">${fmt(d.expense)}</div>
+        <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.txs.filter(t=>t.category!=='Income').length} transactions</div>
+      </div>
+      <div style="background:rgba(124,92,252,.08);border:2px solid rgba(124,92,252,.25);border-radius:14px;padding:14px;text-align:center">
+        <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Saved</div>
+        <div style="font-size:1.2rem;font-weight:900;color:${d.savings>=0?'var(--balance-color)':'var(--expense-color)'}">${fmt(d.savings)}</div>
+        <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.savingsRate}% savings rate</div>
+      </div>
+    </div>
+
+    <!-- Savings rate visual -->
+    ${d.income>0?`<div style="background:var(--surface2);border-radius:12px;padding:12px 14px;margin-bottom:18px">
+      <div style="display:flex;justify-content:space-between;font-size:.72rem;font-weight:700;margin-bottom:6px">
+        <span>Savings Rate</span><span style="color:${d.savingsRate>=30?'var(--income-color)':d.savingsRate>=15?'var(--warning)':'var(--expense-color)'}">${d.savingsRate}% ${d.savingsRate>=30?'🌟 Excellent':d.savingsRate>=15?'👍 Good':'⚠️ Low'}</span>
+      </div>
+      ${bar(d.savingsRate,d.savingsRate>=30?'var(--income-color)':d.savingsRate>=15?'var(--warning)':'var(--expense-color)')}
+      <div style="font-size:.62rem;color:var(--text2);margin-top:5px">Spent ${Math.round((d.expense/d.income)*100)}% of income · Saved ${d.savingsRate}%</div>
+    </div>`:''}
+
+    <!-- Category breakdown -->
+    ${d.catSorted.length?`<div style="margin-bottom:18px">
+      <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px">Spending by Category</div>
+      ${d.catSorted.map(([cat,amt],i)=>{
+        const pct=d.expense>0?Math.round((amt/d.expense)*100):0;
+        const colors=['var(--expense-color)','var(--accent)','var(--balance-color)','var(--accent2)','var(--warning)','var(--accent3)','var(--transfer-color)'];
+        const col=colors[i%colors.length];
+        return`<div style="margin-bottom:8px">
+          <div style="display:flex;justify-content:space-between;font-size:.74rem;font-weight:700;margin-bottom:3px">
+            <span>${cat}</span><span style="color:${col}">${fmt(amt)} <span style="color:var(--text2);font-weight:400">(${pct}%)</span></span>
+          </div>
+          ${bar(pct,col)}
+        </div>`;
+      }).join('')}
+    </div>`:''}
+
+    <!-- Top 5 expenses -->
+    ${d.topExp.length?`<div style="margin-bottom:18px">
+      <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px">Top Expenses</div>
+      ${d.topExp.map((t,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 12px;background:var(--surface2);border-radius:8px;margin-bottom:5px">
+        <span style="font-size:.64rem;color:var(--text2);width:18px;text-align:center">#${i+1}</span>
+        <div style="flex:1;min-width:0">
+          <div style="font-size:.76rem;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${t.subcategory||t.category}${t.notes?` · <span style="color:var(--text2);font-weight:400">${t.notes}</span>`:''}</div>
+          <div style="font-size:.62rem;color:var(--text2)">${t.date} · ${t.category}</div>
+        </div>
+        <span style="font-size:.8rem;font-weight:900;color:var(--expense-color);flex-shrink:0">${fmt(t.amount)}</span>
+      </div>`).join('')}
+    </div>`:''}
+
+    <!-- Account balances -->
+    ${d.accBals.length?`<div style="margin-bottom:10px">
+      <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px">Account Balances</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:8px">
+        ${d.accBals.map(a=>`<div style="background:var(--surface2);border-radius:10px;padding:10px 12px">
+          <div style="font-size:.72rem;font-weight:700">${a.icon} ${a.name}</div>
+          <div style="font-size:.92rem;font-weight:900;color:${a.balance>=0?'var(--accent2)':'var(--expense-color)'};margin-top:2px">${fmt(a.balance)}</div>
+        </div>`).join('')}
+      </div>
+    </div>`:''}
+
+    <!-- Footer -->
+    <div style="border-top:1px solid var(--border);margin-top:14px;padding-top:10px;font-size:.62rem;color:var(--text2);text-align:center">
+      Generated by budget.tracker · ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})} · ${totalTx} transactions
+    </div>
+  </div>`;
+
+  document.getElementById('summaryReportBody').innerHTML=html;
+}
+
+function printSummary(){
+  const d=getSummaryData();
+  const content=document.getElementById('summaryReportBody').innerHTML;
+  const printArea=document.getElementById('summaryPrintArea');
+  printArea.innerHTML=`<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px">${content}</div>`;
+  window.print();
+  setTimeout(()=>printArea.innerHTML='',1000);
+}
+
+function _buildWhatsappText(){
+  const d=getSummaryData();
+  const lines=[
+    `📊 *Budget Summary — ${d.monthName} ${d.year}*`,``,
+    `💰 *Income:* ${fmt(d.income)}`,
+    `💸 *Expenses:* ${fmt(d.expense)}`,
+    `🏦 *Saved:* ${fmt(d.savings)} (${d.savingsRate}%)`,``,
+    `📂 *Top Categories:*`,
+    ...d.catSorted.slice(0,5).map(([cat,amt])=>`  • ${cat}: ${fmt(amt)}`),``,
+    `📈 *Account Balances:*`,
+    ...d.accBals.map(a=>`  ${a.icon} ${a.name}: ${fmt(a.balance)}`),``,
+    `_Generated by budget.tracker_`,
+  ];
+  return lines.join('\n');
+}
+function whatsappSummary(){
+  const text=encodeURIComponent(_buildWhatsappText());
+  window.open(`https://wa.me/?text=${text}`,'_blank');
+}
+function copySummary(){
+  navigator.clipboard.writeText(_buildWhatsappText()).then(()=>showToast('Summary copied!')).catch(()=>showToast('Copy failed',true));
+}
+
+
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'var(--expense-color)':'var(--accent)';t.style.color=isError?'#fff':'#0d0f14';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
 /* ---- INIT ---- */
@@ -2108,6 +2543,10 @@ function initApp(){
   Object.keys(THEMES).forEach(k=>{const o=document.getElementById('topt-'+k);const c=document.getElementById('tchk-'+k);if(o)o.classList.toggle('active',k===currentTheme);if(c)c.style.display=k===currentTheme?'':'none';});
   setPreset('thisYear');
   rebuildCategoryDropdowns();populateYearDropdowns();populateGoalSubcatDropdown();
+  wishlist=JSON.parse(localStorage.getItem('bt_wish')||'[]');
+  populateWishAccountDropdowns();
+  applyTabOrder();
+  initTabDrag();
   updateSummary();renderGoals();renderRecurring();renderAccounts();
   document.getElementById('monthSelect').addEventListener('change',()=>{updateSummary();renderGoalProgress();});
   document.getElementById('yearInput').addEventListener('change',()=>{updateSummary();renderGoalProgress();});
@@ -2117,6 +2556,7 @@ function initApp(){
 // (Required because type="module" scripts have their own scope)
 Object.assign(window,{
   loginWithGoogle,loginLocal,toggleUserMenu,toggleTheme,switchTab,
+  initTabDrag,applyTabOrder,updateBuyPreview,
   openCatModal,closeCatModal,addSubcat,delSubcat,addCategory,deleteCat,
   openEditModal,closeEditModal,saveEdit,deleteTransaction,
   onRowCheck,toggleSelectAll,deleteSelected,clearSelection,
@@ -2128,7 +2568,9 @@ Object.assign(window,{
   renderRecurring,applyRecurring,deleteRecurring,
   renderTable,renderAccounts,renderAnalytics,setAnalyticsView,
   setPreset,applyCustomRange,saveMemo,
+  openSummaryReport,closeSummaryReport,renderSummaryReport,printSummary,whatsappSummary,copySummary,
   setTheme,toggleThemePicker,closeThemePicker,
+  addWish,deleteWish,markWishPurchased,openWishBuyModal,openWishBuyModalFromCard,closeWishBuyModal,confirmBuyWish,renderWishlist,populateWishAccountDropdowns,openWishFundModal,closeWishFundModal,confirmFundWish,updateCardAffordability,updateBuyPreview,
 });
 </script>
 </body>
