@@ -158,10 +158,11 @@ header{
 }
 .hbtn:hover{border-color:var(--accent);color:var(--accent);transform:translateY(-1px);}
 .currency-badge{
-  background:var(--accent3);
-  border:2px solid var(--text);
+  background:var(--surface2);
+  border:2px solid var(--border);
   padding:3px 10px;border-radius:20px;font-size:.72rem;
-  color:var(--text);font-family:'Nunito',sans-serif;font-weight:800;
+  color:var(--text2);font-family:'Nunito',sans-serif;font-weight:800;
+  transition:all .16s;
 }
 .theme-btn{width:34px;height:34px;border-radius:50%;background:var(--surface2);border:2px solid var(--border);cursor:pointer;font-size:.95rem;display:flex;align-items:center;justify-content:center;transition:all .18s;}
 .theme-btn:hover{border-color:var(--accent3);transform:rotate(20deg);}
@@ -631,7 +632,8 @@ tr:hover td{background:var(--surface2);}
     <button class="hbtn" onclick="openCatModal()">⚙ Categories</button>
     <button class="hbtn" id="exportBtn" onclick="exportCSV()">↓ CSV</button>
     <button class="hbtn" id="importBtn" onclick="openImportModal()">↑ Import</button>
-    <button class="hbtn" onclick="openSummaryReport()" style="background:var(--accent3);color:var(--text);border-color:var(--accent3)">📊 Summary</button>
+    <button class="hbtn" onclick="openSummaryReport()">📊 Monthly</button>
+    <button class="hbtn" onclick="openFullReport()">📄 Full Report</button>
     <span class="currency-badge">₹ INR</span>
     <div class="theme-picker-wrap">
       <button class="theme-picker-btn" onclick="toggleThemePicker()" id="themePickerBtn">
@@ -999,6 +1001,39 @@ tr:hover td{background:var(--surface2);}
       <button class="btn" onclick="printSummary()" style="flex:1">🖨️ Save as PDF</button>
       <button class="btn-secondary" onclick="whatsappSummary()" style="flex:1">💬 Share via WhatsApp</button>
       <button class="btn-secondary" onclick="copySummary()" style="flex:1">📋 Copy Text</button>
+    </div>
+  </div>
+</div>
+
+<!-- FULL DATE-RANGE REPORT MODAL -->
+<div class="modal-backdrop" id="fullReportModal">
+  <div class="modal wide" style="max-width:680px;max-height:95vh;overflow-y:auto">
+    <div class="modal-title">
+      📄 Full Report
+      <button class="modal-close" onclick="closeFullReport()">✕</button>
+    </div>
+    <!-- Date range picker -->
+    <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-bottom:16px;padding:12px 14px;background:var(--surface2);border-radius:12px;border:1px solid var(--border)">
+      <div class="field" style="flex:1;min-width:120px;margin:0">
+        <label style="font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:700;margin-bottom:3px;display:block">From</label>
+        <input type="date" id="frFromDate" onchange="renderFullReport()">
+      </div>
+      <div class="field" style="flex:1;min-width:120px;margin:0">
+        <label style="font-size:.6rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);font-family:'Nunito',sans-serif;font-weight:700;margin-bottom:3px;display:block">To</label>
+        <input type="date" id="frToDate" onchange="renderFullReport()">
+      </div>
+      <div style="display:flex;gap:5px;flex-wrap:wrap">
+        <button class="preset-btn" onclick="setFrPreset('thisMonth')">This Month</button>
+        <button class="preset-btn" onclick="setFrPreset('last3')">3 Months</button>
+        <button class="preset-btn" onclick="setFrPreset('last6')">6 Months</button>
+        <button class="preset-btn" onclick="setFrPreset('thisYear')">This Year</button>
+        <button class="preset-btn" onclick="setFrPreset('all')">All Time</button>
+      </div>
+    </div>
+    <div id="fullReportBody"></div>
+    <div style="display:flex;gap:8px;margin-top:16px;flex-wrap:wrap">
+      <button class="btn" onclick="printFullReport()" style="flex:1">🖨️ Download PDF</button>
+      <button class="btn-secondary" onclick="copyFullReport()" style="flex:1">📋 Copy Summary</button>
     </div>
   </div>
 </div>
@@ -1868,6 +1903,7 @@ function deleteSelected(){
 }
 document.getElementById('editModal').addEventListener('click',e=>{if(e.target===document.getElementById('editModal'))closeEditModal();});
 document.getElementById('summaryModal').addEventListener('click',e=>{if(e.target===document.getElementById('summaryModal'))closeSummaryReport();});
+document.getElementById('fullReportModal').addEventListener('click',e=>{if(e.target===document.getElementById('fullReportModal'))closeFullReport();});
 
 /* ---- MEMO ---- */
 function saveMemo(){localStorage.setItem('bt_memo',document.getElementById('memoText').value);}
@@ -1997,16 +2033,25 @@ function deleteRecurring(id){recurringTxs=recurringTxs.filter(r=>r.id!==id);save
 function exportCSV(){
   if(!transactions.length){showToast('No transactions!',true);return;}
   const accMap={};accounts.forEach(a=>{accMap[a.id]=a.name;});
-  const header=['Date','Category','Sub-Category','Account','Notes','Amount','Type'];
+  const esc=v=>`"${String(v||'').replace(/"/g,'""')}"`;
+  const header=['Date','Type','Category','Sub-Category','Account','From-Account','To-Account','Notes','Amount'];
   const rows=[...transactions].sort((a,b)=>new Date(a.date)-new Date(b.date)).map(t=>[
-    t.date,t.category,t.subcategory,
-    t.isTransfer?`${accMap[t.fromAccount]||''}→${accMap[t.toAccount]||''}`:accMap[t.accountId]||'',
-    `"${(t.notes||'').replace(/"/g,'""')}"`,t.amount,
-    t.category==='Income'?'Credit':t.isTransfer?'Transfer':'Debit'
+    t.date,
+    t.isTransfer?'Transfer':t.category==='Income'?'Income':'Expense',
+    esc(t.category||''),
+    esc(t.subcategory||''),
+    esc(t.isTransfer?'':accMap[t.accountId]||''),
+    esc(t.isTransfer?accMap[t.fromAccount]||'':''),
+    esc(t.isTransfer?accMap[t.toAccount]||'':''),
+    esc(t.notes||''),
+    t.amount,
   ]);
   const csv=[header,...rows].map(r=>r.join(',')).join('\n');
-  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([csv],{type:'text/csv'}));
-  a.download=`budget_${today()}.csv`;a.click();showToast('CSV exported!');
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob(['\uFEFF'+csv],{type:'text/csv;charset=utf-8'}));
+  a.download=`budget_tracker_${today()}.csv`;
+  a.click();
+  showToast('CSV exported!');
 }
 
 /* ---- CSV IMPORT ---- */
@@ -2016,40 +2061,108 @@ function closeImportModal(){document.getElementById('importModal').classList.rem
 document.getElementById('importModal').addEventListener('click',e=>{if(e.target===document.getElementById('importModal'))closeImportModal();});
 function onImportDrop(e){e.preventDefault();document.getElementById('importDrop').classList.remove('drag');const f=e.dataTransfer.files[0];if(f)parseCSV(f);}
 function onImportFile(e){const f=e.target.files[0];if(f)parseCSV(f);}
+function parseCSVLine(line){
+  const cols=[];let cur='',inQ=false;
+  for(let i=0;i<line.length;i++){
+    const c=line[i];
+    if(c==='"'){if(inQ&&line[i+1]==='"'){cur+='"';i++;}else inQ=!inQ;}
+    else if(c===','&&!inQ){cols.push(cur.trim());cur='';}
+    else cur+=c;
+  }
+  cols.push(cur.trim());
+  return cols;
+}
 function parseCSV(file){
   const reader=new FileReader();
   reader.onload=e=>{
-    const lines=e.target.result.split('\n').filter(l=>l.trim());
+    const text=e.target.result.replace(/^\uFEFF/,''); // strip BOM
+    const lines=text.split(/\r?\n/).filter(l=>l.trim());
     if(!lines.length)return;
-    const header=lines[0].split(',').map(h=>h.trim().toLowerCase().replace(/[^a-z]/g,''));
-    const rows=lines.slice(1);
+    const rawHeader=parseCSVLine(lines[0]);
+    const hdr=rawHeader.map(h=>h.toLowerCase().replace(/[^a-z]/g,''));
+    const col=name=>hdr.findIndex(h=>h===name||h.includes(name));
+
+    const dateIdx=col('date');
+    const typeIdx=col('type');
+    const catIdx=hdr.findIndex(h=>h==='category'||h==='cat');
+    const subIdx=hdr.findIndex(h=>h==='subcategory'||h==='subcat'||h==='subcategory'||h==='subcat'||h==='sub');
+    const accIdx=hdr.findIndex(h=>h==='account');
+    const fromIdx=hdr.findIndex(h=>h==='fromaccount');
+    const toIdx=hdr.findIndex(h=>h==='toaccount');
+    const noteIdx=col('notes');
+    const amtIdx=hdr.findIndex(h=>h==='amount'||h==='amt');
+
+    // Build account name→id map for matching
+    const accNameMap={};
+    accounts.forEach(a=>{accNameMap[a.name.toLowerCase()]=a.id;});
+
     importData=[];const preview=[];
-    rows.forEach((line,i)=>{
-      const cols=line.match(/(".*?"|[^,]+|(?<=,)(?=,)|(?<=,)$|^(?=,))/g)||line.split(',');
-      const clean=cols.map(c=>c.trim().replace(/^"|"$/g,''));
-      const dateIdx=header.findIndex(h=>h.includes('date'));
-      const catIdx=header.findIndex(h=>h.includes('cat')&&!h.includes('sub'));
-      const subIdx=header.findIndex(h=>h.includes('sub'));
-      const amtIdx=header.findIndex(h=>h.includes('amt')||h.includes('amount'));
-      const noteIdx=header.findIndex(h=>h.includes('note'));
-      const typeIdx=header.findIndex(h=>h.includes('type'));
-      const date=clean[dateIdx];
-      const amount=parseFloat(clean[amtIdx]);
+    lines.slice(1).forEach(line=>{
+      const cols=parseCSVLine(line);
+      const date=cols[dateIdx]||'';
+      const amount=parseFloat(cols[amtIdx]);
+      const type=(cols[typeIdx]||'expense').toLowerCase();
       const ok=date&&!isNaN(amount)&&amount>0;
-      const tx={date,category:clean[catIdx]||'Expenses',subcategory:clean[subIdx]||'Other',notes:clean[noteIdx]||'',amount,type:clean[typeIdx]||'Debit'};
+      const accName=(cols[accIdx]||'').toLowerCase();
+      const fromName=(cols[fromIdx]||'').toLowerCase();
+      const toName=(cols[toIdx]||'').toLowerCase();
+      const accountId=accNameMap[accName]||accounts[0]?.id||null;
+      const fromAccount=accNameMap[fromName]||null;
+      const toAccount=accNameMap[toName]||null;
+      const isTransfer=type==='transfer';
+      const category=isTransfer?'Transfer':(type==='income'?'Income':(cols[catIdx]||'Expenses'));
+      const tx={
+        date,amount,type,
+        category,
+        subcategory:cols[subIdx]||'',
+        notes:cols[noteIdx]||'',
+        accountId,
+        isTransfer,
+        fromAccount:isTransfer?fromAccount:null,
+        toAccount:isTransfer?toAccount:null,
+      };
       if(ok){importData.push(tx);preview.push({...tx,status:'ok'});}
       else preview.push({...tx,status:'skip',reason:'Missing date or amount'});
     });
-    document.getElementById('importPreview').innerHTML=`<div class="import-preview">${preview.slice(0,20).map(r=>`<div class="import-row"><span class="import-badge ${r.status}">${r.status}</span><span style="flex:1">${r.date||'?'} — ${r.subcategory}</span><span style="color:${r.status==='ok'?'var(--income-color)':'var(--text2)'}">₹${r.amount||0}</span></div>`).join('')}${preview.length>20?`<div style="color:var(--text2);font-size:.72rem;padding:8px 0">…and ${preview.length-20} more</div>`:''}</div>`;
-    document.getElementById('importSummary').textContent=`${importData.length} valid rows found, ${preview.length-importData.length} skipped.`;
+
+    document.getElementById('importPreview').innerHTML=`<div class="import-preview">
+      ${preview.slice(0,20).map(r=>`<div class="import-row">
+        <span class="import-badge ${r.status}">${r.status}</span>
+        <span style="flex:1;font-size:.72rem">${r.date||'?'} · ${r.isTransfer?'Transfer':`${r.category} / ${r.subcategory||'—'}`}</span>
+        <span style="font-size:.72rem;color:var(--text2)">${r.accountId?accounts.find(a=>a.id===r.accountId)?.name||'—':'—'}</span>
+        <span style="font-weight:700;color:${r.status==='ok'?'var(--income-color)':'var(--text2)'}">${fmt(r.amount||0)}</span>
+      </div>`).join('')}
+      ${preview.length>20?`<div style="color:var(--text2);font-size:.72rem;padding:8px 0">…and ${preview.length-20} more rows</div>`:''}
+    </div>`;
+    document.getElementById('importSummary').textContent=`${importData.length} valid rows · ${preview.length-importData.length} skipped`;
     document.getElementById('importActions').style.display=importData.length?'block':'none';
-  };reader.readAsText(file);
+  };
+  reader.readAsText(file);
 }
+
 function confirmImport(){
+  let added=0,skipped=0;
   importData.forEach(row=>{
-    transactions.unshift({id:Date.now()+Math.random(),date:row.date,amount:row.amount,category:row.type==='Credit'?'Income':row.category,subcategory:row.subcategory,notes:row.notes,recurring:'none'});
+    // Skip exact duplicates (same date + amount + category + notes)
+    const isDup=transactions.some(t=>t.date===row.date&&t.amount===row.amount&&t.category===row.category&&(t.notes||'')===(row.notes||''));
+    if(isDup){skipped++;return;}
+    transactions.unshift({
+      id:Date.now()+Math.random(),
+      date:row.date,
+      amount:row.amount,
+      category:row.category,
+      subcategory:row.subcategory,
+      notes:row.notes,
+      accountId:row.accountId,
+      isTransfer:row.isTransfer||false,
+      fromAccount:row.fromAccount||null,
+      toAccount:row.toAccount||null,
+    });
+    added++;
   });
-  save('bt_tx',transactions);updateSummary();renderTable();closeImportModal();showToast(`${importData.length} transactions imported!`);
+  save('bt_tx',transactions);
+  updateSummary();renderTable();closeImportModal();
+  showToast(`${added} imported${skipped?`, ${skipped} duplicates skipped`:''}!`);
 }
 
 /* ---- ANALYTICS DATE RANGE ---- */
@@ -2405,6 +2518,11 @@ function getSummaryData(){
 function renderSummaryReport(){
   const d=getSummaryData();
   const totalTx=d.txs.length;
+  // Read live theme colors
+  const ic=getCSSVar('--income-color'),ec=getCSSVar('--expense-color'),bc=getCSSVar('--balance-color');
+  const toRgba=(hex,a)=>{try{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},${a})`;}catch{return'rgba(128,128,128,'+a+')';}};
+  const icBg=toRgba(ic,.08),ecBg=toRgba(ec,.08),bcBg=toRgba(bc,.08);
+  const icBd=toRgba(ic,.25),ecBd=toRgba(ec,.25),bcBd=toRgba(bc,.25);
   const bar=(pct,color)=>`<div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100,pct)}%;background:${color};border-radius:3px"></div></div>`;
 
   const html=`
@@ -2417,17 +2535,17 @@ function renderSummaryReport(){
 
     <!-- Big 3 stats -->
     <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:18px">
-      <div style="background:rgba(0,184,148,.08);border:2px solid rgba(0,184,148,.25);border-radius:14px;padding:14px;text-align:center">
+      <div style="background:${icBg};border:2px solid ${icBd};border-radius:14px;padding:14px;text-align:center">
         <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Income</div>
         <div style="font-size:1.2rem;font-weight:900;color:var(--income-color)">${fmt(d.income)}</div>
         <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.txs.filter(t=>t.category==='Income').length} transactions</div>
       </div>
-      <div style="background:rgba(255,92,53,.08);border:2px solid rgba(255,92,53,.25);border-radius:14px;padding:14px;text-align:center">
+      <div style="background:${ecBg};border:2px solid ${ecBd};border-radius:14px;padding:14px;text-align:center">
         <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Expenses</div>
         <div style="font-size:1.2rem;font-weight:900;color:var(--expense-color)">${fmt(d.expense)}</div>
         <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.txs.filter(t=>t.category!=='Income').length} transactions</div>
       </div>
-      <div style="background:rgba(124,92,252,.08);border:2px solid rgba(124,92,252,.25);border-radius:14px;padding:14px;text-align:center">
+      <div style="background:${bcBg};border:2px solid ${bcBd};border-radius:14px;padding:14px;text-align:center">
         <div style="font-size:.62rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:4px">Saved</div>
         <div style="font-size:1.2rem;font-weight:900;color:${d.savings>=0?'var(--balance-color)':'var(--expense-color)'}">${fmt(d.savings)}</div>
         <div style="font-size:.64rem;color:var(--text2);margin-top:2px">${d.savingsRate}% savings rate</div>
@@ -2494,11 +2612,117 @@ function renderSummaryReport(){
 
 function printSummary(){
   const d=getSummaryData();
-  const content=document.getElementById('summaryReportBody').innerHTML;
-  const printArea=document.getElementById('summaryPrintArea');
-  printArea.innerHTML=`<div style="font-family:Arial,sans-serif;max-width:700px;margin:0 auto;padding:20px">${content}</div>`;
-  window.print();
-  setTimeout(()=>printArea.innerHTML='',1000);
+  // Resolve all theme colors upfront
+  const cs=getComputedStyle(document.documentElement);
+  const cv=n=>cs.getPropertyValue(n).trim();
+  const C={
+    text:cv('--text'),text2:cv('--text2'),
+    bg:cv('--bg'),surface:cv('--surface'),surface2:cv('--surface2'),border:cv('--border'),
+    accent:cv('--accent'),accent2:cv('--accent2'),accent3:cv('--accent3'),accent4:cv('--accent4'),
+    income:cv('--income-color'),expense:cv('--expense-color'),balance:cv('--balance-color'),
+    warning:cv('--warning'),transfer:cv('--transfer-color'),
+  };
+  const toRgba=(hex,a)=>{try{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},${a})`;}catch{return hex;}};
+  const CAT_COLORS=[C.expense,C.accent,C.balance,C.accent2,C.warning,C.accent3,C.transfer];
+  const bar=(pct,color)=>`<div style="height:7px;background:${C.border};border-radius:4px;overflow:hidden;margin-top:4px"><div style="height:100%;width:${Math.min(100,pct)}%;background:${color};border-radius:4px"></div></div>`;
+  const sectionTitle=label=>`<div style="font-size:9px;text-transform:uppercase;letter-spacing:.12em;font-weight:800;color:${C.text2};margin:18px 0 10px;padding-bottom:5px;border-bottom:2px solid ${C.border}">${label}</div>`;
+
+  const html=`<!DOCTYPE html><html><head><meta charset="UTF-8">
+<title>Budget Summary — ${d.monthName} ${d.year}</title>
+<style>
+  @page{size:A4;margin:15mm 14mm;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',Arial,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  body{font-size:11px;color:${C.text};background:#fff;line-height:1.55;}
+  .no-break{page-break-inside:avoid;}
+</style>
+</head><body>
+<div style="max-width:700px;margin:0 auto;padding:10px">
+
+  <!-- HEADER -->
+  <div style="text-align:center;padding:14px 0 18px;border-bottom:3px solid ${C.accent};margin-bottom:20px" class="no-break">
+    <div style="font-size:22px;font-weight:900;letter-spacing:-.02em;color:${C.text}">budget<span style="color:${C.accent}">.</span>tracker</div>
+    <div style="font-size:13px;font-weight:700;margin-top:5px;color:${C.text2}">${d.monthName} ${d.year} &nbsp;·&nbsp; Financial Summary</div>
+    <div style="font-size:9px;color:${C.text2};margin-top:3px">${d.txs.length} transactions · Generated ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</div>
+  </div>
+
+  <!-- BIG 3 STATS -->
+  <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px" class="no-break">
+    <div style="background:${toRgba(C.income,.1)};border:2px solid ${toRgba(C.income,.3)};border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:${C.text2};margin-bottom:5px">Total Income</div>
+      <div style="font-size:18px;font-weight:900;color:${C.income}">${fmt(d.income)}</div>
+      <div style="font-size:9px;color:${C.text2};margin-top:3px">${d.txs.filter(t=>t.category==='Income').length} transactions</div>
+    </div>
+    <div style="background:${toRgba(C.expense,.1)};border:2px solid ${toRgba(C.expense,.3)};border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:${C.text2};margin-bottom:5px">Total Expenses</div>
+      <div style="font-size:18px;font-weight:900;color:${C.expense}">${fmt(d.expense)}</div>
+      <div style="font-size:9px;color:${C.text2};margin-top:3px">${d.txs.filter(t=>t.category!=='Income').length} transactions</div>
+    </div>
+    <div style="background:${toRgba(C.balance,.1)};border:2px solid ${toRgba(C.balance,.3)};border-radius:12px;padding:14px;text-align:center">
+      <div style="font-size:8px;text-transform:uppercase;letter-spacing:.12em;color:${C.text2};margin-bottom:5px">Net Saved</div>
+      <div style="font-size:18px;font-weight:900;color:${d.savings>=0?C.balance:C.expense}">${fmt(d.savings)}</div>
+      <div style="font-size:9px;color:${C.text2};margin-top:3px">${d.savingsRate}% savings rate</div>
+    </div>
+  </div>
+
+  <!-- SAVINGS RATE BAR -->
+  ${d.income>0?`<div style="background:${C.surface2};border-radius:10px;padding:12px 14px;margin-bottom:20px" class="no-break">
+    <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700;margin-bottom:6px">
+      <span style="color:${C.text}">Savings Rate</span>
+      <span style="color:${d.savingsRate>=30?C.income:d.savingsRate>=15?C.warning:C.expense}">${d.savingsRate}% · ${d.savingsRate>=30?'Excellent':d.savingsRate>=15?'Good':'Low'}</span>
+    </div>
+    ${bar(d.savingsRate,d.savingsRate>=30?C.income:d.savingsRate>=15?C.warning:C.expense)}
+    <div style="font-size:9px;color:${C.text2};margin-top:5px">Spent ${Math.round((d.expense/d.income)*100)}% of income &nbsp;·&nbsp; Saved ${d.savingsRate}%</div>
+  </div>`:''}
+
+  <!-- CATEGORY BREAKDOWN -->
+  ${d.catSorted.length?`${sectionTitle('Spending by Category')}
+  <div class="no-break">
+  ${d.catSorted.map(([cat,amt],i)=>{
+    const pct=d.expense>0?Math.round((amt/d.expense)*100):0;
+    const col=CAT_COLORS[i%CAT_COLORS.length];
+    return`<div style="margin-bottom:9px">
+      <div style="display:flex;justify-content:space-between;font-size:10px;font-weight:700">
+        <span style="color:${C.text}">${cat}</span>
+        <span style="color:${col}">${fmt(amt)} <span style="color:${C.text2};font-weight:400">(${pct}%)</span></span>
+      </div>${bar(pct,col)}
+    </div>`;
+  }).join('')}
+  </div>`:''}
+
+  <!-- TOP EXPENSES -->
+  ${d.topExp.length?`${sectionTitle('Top Expenses')}
+  <div class="no-break">
+  ${d.topExp.map((t,i)=>`<div style="display:flex;align-items:center;gap:10px;padding:8px 11px;background:${i%2?C.surface2:'transparent'};border-radius:7px;margin-bottom:4px">
+    <span style="font-size:9px;color:${C.text2};width:18px;text-align:center;font-weight:700">#${i+1}</span>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:10px;font-weight:700;color:${C.text}">${t.subcategory||t.category}${t.notes?` · <span style="color:${C.text2};font-weight:400">${t.notes}</span>`:''}</div>
+      <div style="font-size:9px;color:${C.text2}">${t.date} · ${t.category}</div>
+    </div>
+    <span style="font-size:11px;font-weight:900;color:${C.expense}">${fmt(t.amount)}</span>
+  </div>`).join('')}
+  </div>`:''}
+
+  <!-- ACCOUNT BALANCES -->
+  ${d.accBals.length?`${sectionTitle('Account Balances')}
+  <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px" class="no-break">
+    ${d.accBals.map(a=>`<div style="background:${C.surface2};border:1px solid ${C.border};border-radius:10px;padding:10px 12px">
+      <div style="font-size:10px;font-weight:700;color:${C.text}">${a.icon||'💳'} ${a.name}</div>
+      <div style="font-size:14px;font-weight:900;color:${a.balance>=0?C.accent2:C.expense};margin-top:3px">${fmt(a.balance)}</div>
+    </div>`).join('')}
+  </div>`:''}
+
+  <!-- FOOTER -->
+  <div style="border-top:1px solid ${C.border};margin-top:20px;padding-top:10px;font-size:9px;color:${C.text2};text-align:center">
+    budget.tracker &nbsp;·&nbsp; ${d.monthName} ${d.year} Summary &nbsp;·&nbsp; Generated ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}
+  </div>
+
+</div>
+</body></html>`;
+
+  const win=window.open('','_blank','width=820,height=700');
+  if(!win){showToast('Allow popups to print!',true);return;}
+  win.document.write(html);win.document.close();win.focus();
+  setTimeout(()=>win.print(),500);
 }
 
 function _buildWhatsappText(){
@@ -2524,6 +2748,375 @@ function copySummary(){
   navigator.clipboard.writeText(_buildWhatsappText()).then(()=>showToast('Summary copied!')).catch(()=>showToast('Copy failed',true));
 }
 
+
+/* ---- FULL DATE-RANGE REPORT ---- */
+function openFullReport(){
+  const now=new Date();
+  const y=now.getFullYear(),m=now.getMonth();
+  document.getElementById('frFromDate').value=`${y}-${String(m+1).padStart(2,'0')}-01`;
+  const lastDay=new Date(y,m+1,0).getDate();
+  document.getElementById('frToDate').value=`${y}-${String(m+1).padStart(2,'0')}-${lastDay}`;
+  renderFullReport();
+  document.getElementById('fullReportModal').classList.add('open');
+}
+function closeFullReport(){document.getElementById('fullReportModal').classList.remove('open');}
+
+function setFrPreset(p){
+  const now=new Date();const y=now.getFullYear(),m=now.getMonth();let from,to=today();
+  if(p==='thisMonth'){from=`${y}-${String(m+1).padStart(2,'0')}-01`;}
+  else if(p==='last3'){const d=new Date(now);d.setMonth(d.getMonth()-3);from=d.toISOString().slice(0,10);}
+  else if(p==='last6'){const d=new Date(now);d.setMonth(d.getMonth()-6);from=d.toISOString().slice(0,10);}
+  else if(p==='thisYear'){from=`${y}-01-01`;}
+  else if(p==='all'){const dates=transactions.map(t=>t.date).sort();from=dates[0]||`${y}-01-01`;}
+  document.getElementById('frFromDate').value=from;
+  document.getElementById('frToDate').value=to;
+  renderFullReport();
+}
+
+function getFullReportData(){
+  const from=document.getElementById('frFromDate').value;
+  const to=document.getElementById('frToDate').value;
+  if(!from||!to)return null;
+  const txs=transactions.filter(t=>t.date>=from&&t.date<=to&&!t.isTransfer);
+  const allTxsSorted=[...txs].sort((a,b)=>a.date.localeCompare(b.date));
+  const income=txs.filter(t=>t.category==='Income').reduce((s,t)=>s+t.amount,0);
+  const expense=txs.filter(t=>t.category!=='Income').reduce((s,t)=>s+t.amount,0);
+  const savings=income-expense;
+  const savingsRate=income>0?Math.round((savings/income)*100):0;
+  const byCat={};
+  txs.filter(t=>t.category!=='Income').forEach(t=>{
+    if(!byCat[t.category])byCat[t.category]={total:0,subs:{}};
+    byCat[t.category].total+=t.amount;
+    const sub=t.subcategory||'Other';
+    byCat[t.category].subs[sub]=(byCat[t.category].subs[sub]||0)+t.amount;
+  });
+  const catSorted=Object.entries(byCat).sort((a,b)=>b[1].total-a[1].total);
+  const incSubs={};
+  txs.filter(t=>t.category==='Income').forEach(t=>{const s=t.subcategory||'Income';incSubs[s]=(incSubs[s]||0)+t.amount;});
+  const byMonth={};
+  txs.forEach(t=>{
+    const mk=t.date.slice(0,7);
+    if(!byMonth[mk])byMonth[mk]={income:0,expense:0};
+    if(t.category==='Income')byMonth[mk].income+=t.amount;else byMonth[mk].expense+=t.amount;
+  });
+  const monthlyRows=Object.entries(byMonth).sort((a,b)=>a[0].localeCompare(b[0]));
+  return{from,to,txs:allTxsSorted,income,expense,savings,savingsRate,catSorted,incSubs,monthlyRows,accBals:accounts.map(a=>({...a}))};
+}
+
+function renderFullReport(){
+  const d=getFullReportData();
+  if(!d){document.getElementById('fullReportBody').innerHTML='';return;}
+  // Live theme colors
+  const ic=getCSSVar('--income-color'),ec=getCSSVar('--expense-color'),bc=getCSSVar('--balance-color');
+  const toRgba=(hex,a)=>{try{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},${a})`;}catch{return'rgba(128,128,128,'+a+')';}};
+  const icBg=toRgba(ic,.08),ecBg=toRgba(ec,.08),bcBg=toRgba(bc,.08);
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtDate=s=>{const[y,mo,day]=s.split('-');return`${day} ${MN[parseInt(mo)-1]} ${y}`;};
+  const bar=(pct,color,h=6)=>`<div style="height:${h}px;background:var(--border);border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100,pct)}%;background:${color};border-radius:3px"></div></div>`;
+  const COLORS=['var(--expense-color)','var(--accent)','var(--balance-color)','var(--accent2)','var(--warning)','var(--accent4)','var(--transfer-color)','var(--income-color)'];
+  const days=Math.round((new Date(d.to)-new Date(d.from))/(1000*60*60*24))+1;
+
+  const html=`<div style="font-family:'Nunito',sans-serif">
+  <div style="background:linear-gradient(135deg,var(--accent),var(--balance-color));border-radius:16px;padding:20px 24px;margin-bottom:18px;color:#fff;position:relative;overflow:hidden">
+    <div style="position:absolute;top:-30px;right:-30px;width:120px;height:120px;background:rgba(255,255,255,.08);border-radius:50%"></div>
+    <div style="font-size:1.3rem;font-weight:900;letter-spacing:-.02em">budget<span style="opacity:.7">.</span>tracker</div>
+    <div style="font-size:.78rem;opacity:.85;font-weight:600;margin-top:3px">Financial Report · ${fmtDate(d.from)} — ${fmtDate(d.to)}</div>
+    <div style="font-size:.7rem;opacity:.65;margin-top:2px">${days} day${days>1?'s':''} · ${d.txs.length} transactions</div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px">
+    ${[
+      {label:'Income',val:fmt(d.income),color:'var(--income-color)',bg:icBg},
+      {label:'Expenses',val:fmt(d.expense),color:'var(--expense-color)',bg:ecBg},
+      {label:'Net Saved',val:fmt(d.savings),color:d.savings>=0?'var(--balance-color)':'var(--expense-color)',bg:bcBg},
+      {label:'Savings Rate',val:`${d.savingsRate}%`,color:d.savingsRate>=30?'var(--income-color)':d.savingsRate>=15?'var(--warning)':'var(--expense-color)',bg:'var(--surface2)'},
+    ].map(c=>`<div style="background:${c.bg};border-radius:12px;padding:12px;text-align:center">
+      <div style="font-size:.58rem;text-transform:uppercase;letter-spacing:.1em;color:var(--text2);margin-bottom:3px">${c.label}</div>
+      <div style="font-size:.95rem;font-weight:900;color:${c.color}">${c.val}</div>
+    </div>`).join('')}
+  </div>
+
+  ${d.monthlyRows.length>1?`<div style="margin-bottom:20px">
+    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">📅 Monthly Breakdown</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.74rem">
+      <thead><tr style="background:var(--surface2)">
+        ${['Month','Income','Expenses','Net','Spend Trend'].map(h=>`<th style="padding:8px 10px;text-align:${h==='Month'?'left':'right'};border-bottom:2px solid var(--border);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text2)">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>${d.monthlyRows.map(([mk,v])=>{const net=v.income-v.expense;const[y,mo]=mk.split('-');
+        return`<tr style="border-bottom:1px solid var(--border)">
+          <td style="padding:7px 10px;font-weight:700">${MN[parseInt(mo)-1]} ${y}</td>
+          <td style="padding:7px 10px;text-align:right;color:var(--income-color);font-weight:700">${fmt(v.income)}</td>
+          <td style="padding:7px 10px;text-align:right;color:var(--expense-color);font-weight:700">${fmt(v.expense)}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:800;color:${net>=0?'var(--income-color)':'var(--expense-color)'}">${net>=0?'+':''}${fmt(net)}</td>
+          <td style="padding:7px 10px;min-width:70px">${bar(v.income>0?(v.expense/v.income)*100:100,'var(--expense-color)',5)}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+  </div>`:''}
+
+  ${Object.keys(d.incSubs).length?`<div style="margin-bottom:20px">
+    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">💰 Income Sources</div>
+    ${Object.entries(d.incSubs).sort((a,b)=>b[1]-a[1]).map(([src,amt])=>{const pct=d.income>0?Math.round((amt/d.income)*100):0;
+      return`<div style="margin-bottom:8px"><div style="display:flex;justify-content:space-between;font-size:.74rem;font-weight:700"><span>${src}</span><span style="color:var(--income-color)">${fmt(amt)} <span style="color:var(--text2);font-weight:400">${pct}%</span></span></div>${bar(pct,'var(--income-color)')}</div>`;
+    }).join('')}
+  </div>`:''}
+
+  ${d.catSorted.length?`<div style="margin-bottom:20px">
+    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">📂 Spending by Category</div>
+    ${d.catSorted.map(([cat,data],i)=>{const pct=d.expense>0?Math.round((data.total/d.expense)*100):0;const col=COLORS[i%COLORS.length];
+      const subEntries=Object.entries(data.subs).sort((a,b)=>b[1]-a[1]);
+      return`<div style="margin-bottom:14px">
+        <div style="display:flex;justify-content:space-between;font-size:.78rem;font-weight:800;margin-bottom:3px">
+          <span>${cat}</span><span style="color:${col}">${fmt(data.total)} <span style="color:var(--text2);font-size:.68rem;font-weight:400">${pct}%</span></span>
+        </div>${bar(pct,col,7)}
+        <div style="display:flex;flex-wrap:wrap;gap:4px;margin-top:6px">
+          ${subEntries.map(([sub,amt])=>`<span style="background:var(--surface2);border:1px solid var(--border);border-radius:20px;padding:2px 9px;font-size:.64rem;color:var(--text2)">${sub}: ${fmt(amt)}</span>`).join('')}
+        </div>
+      </div>`;}).join('')}
+  </div>`:''}
+
+  <div style="margin-bottom:20px">
+    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">🧾 All Transactions (${d.txs.length})</div>
+    <div style="overflow-x:auto"><table style="width:100%;border-collapse:collapse;font-size:.72rem">
+      <thead><tr style="background:var(--surface2)">
+        ${['Date','Category','Sub-Cat','Account','Notes','Amount'].map(h=>`<th style="padding:7px 10px;text-align:${h==='Amount'?'right':'left'};border-bottom:2px solid var(--border);font-size:.6rem;text-transform:uppercase;letter-spacing:.08em;color:var(--text2)">${h}</th>`).join('')}
+      </tr></thead>
+      <tbody>${d.txs.map((t,idx)=>{const acc=accounts.find(a=>a.id===t.accountId);const isIncome=t.category==='Income';
+        return`<tr style="border-bottom:1px solid var(--border);${idx%2?'background:var(--surface2)':''}">
+          <td style="padding:7px 10px;color:var(--text2);white-space:nowrap;font-size:.68rem">${t.date}</td>
+          <td style="padding:7px 10px;font-weight:700">${t.category}</td>
+          <td style="padding:7px 10px;color:var(--text2)">${t.subcategory||'—'}</td>
+          <td style="padding:7px 10px;color:var(--text2);white-space:nowrap">${acc?`${acc.icon||'💳'} ${acc.name}`:'—'}</td>
+          <td style="padding:7px 10px;color:var(--text2);max-width:130px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.notes||'—'}</td>
+          <td style="padding:7px 10px;text-align:right;font-weight:800;color:${isIncome?'var(--income-color)':'var(--expense-color)'}">
+            ${isIncome?'+ ':'− '}${fmt(t.amount)}</td>
+        </tr>`;}).join('')}
+      </tbody>
+    </table></div>
+  </div>
+
+  <div style="margin-bottom:16px">
+    <div style="font-size:.68rem;text-transform:uppercase;letter-spacing:.1em;font-weight:800;color:var(--text2);margin-bottom:10px;padding-bottom:6px;border-bottom:1px solid var(--border)">🏦 Current Account Balances</div>
+    <div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(140px,1fr));gap:8px">
+      ${d.accBals.map(a=>`<div style="background:var(--surface2);border:2px solid var(--border);border-radius:12px;padding:12px">
+        <div style="font-size:.78rem;font-weight:700">${a.icon||'💳'} ${a.name}</div>
+        <div style="font-size:1rem;font-weight:900;margin-top:3px;color:${a.balance>=0?'var(--accent2)':'var(--expense-color)'}">${fmt(a.balance)}</div>
+      </div>`).join('')}
+      <div style="background:${bcBg};border:2px solid var(--balance-color);border-radius:12px;padding:12px">
+        <div style="font-size:.78rem;font-weight:700;color:var(--text2)">Total</div>
+        <div style="font-size:1rem;font-weight:900;margin-top:3px;color:var(--balance-color)">${fmt(d.accBals.reduce((s,a)=>s+a.balance,0))}</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="border-top:1px solid var(--border);padding-top:10px;font-size:.62rem;color:var(--text2);text-align:center">
+    budget.tracker · Generated ${new Date().toLocaleString('en-IN',{day:'2-digit',month:'long',year:'numeric',hour:'2-digit',minute:'2-digit'})}
+  </div>
+</div>`;
+
+  document.getElementById('fullReportBody').innerHTML=html;
+}
+
+function printFullReport(){
+  const d=getFullReportData();if(!d)return;
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const fmtDate=s=>{const[y,mo,day]=s.split('-');return`${day} ${MN[parseInt(mo)-1]} ${y}`;};
+  const days=Math.round((new Date(d.to)-new Date(d.from))/(1000*60*60*24))+1;
+
+  // Resolve CSS vars to real colors for print (CSS vars don't always work in new windows)
+  const cs=getComputedStyle(document.documentElement);
+  const cv=n=>cs.getPropertyValue(n).trim();
+  const C={
+    income:cv('--income-color'),
+    expense:cv('--expense-color'),
+    balance:cv('--balance-color'),
+    accent:cv('--accent'),
+    accent2:cv('--accent2'),
+    accent3:cv('--accent3'),
+    accent4:cv('--accent4'),
+    warning:cv('--warning'),
+    transfer:cv('--transfer-color'),
+    text:cv('--text'),text2:cv('--text2'),
+    border:cv('--border'),surface:cv('--surface2'),
+    bg:cv('--bg'),
+    palette:[cv('--expense-color'),cv('--accent'),cv('--balance-color'),cv('--accent2'),cv('--warning'),cv('--accent4'),cv('--transfer-color'),cv('--income-color')],
+  };
+
+  const bar=(pct,color,h=6)=>`<div style="height:${h}px;background:#e8e8e8;border-radius:3px;overflow:hidden;margin-top:3px"><div style="height:100%;width:${Math.min(100,pct)}%;background:${color};border-radius:3px"></div></div>`;
+
+  // Build transaction rows — chunked to avoid single table spanning too many pages
+  const txRows=d.txs.map((t,idx)=>{
+    const acc=accounts.find(a=>a.id===t.accountId);
+    const isInc=t.category==='Income';
+    return`<tr style="${idx%2?'background:#f8f8f8':''}">
+      <td>${t.date}</td>
+      <td><strong>${t.category}</strong></td>
+      <td style="color:#666">${t.subcategory||'—'}</td>
+      <td style="color:#666">${acc?`${acc.icon||''} ${acc.name}`:'—'}</td>
+      <td style="color:#666;max-width:120px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${t.notes||'—'}</td>
+      <td style="text-align:right;font-weight:700;color:${isInc?C.income:C.expense}">${isInc?'+ ':'− '}${fmt(t.amount)}</td>
+    </tr>`;
+  }).join('');
+
+  const catRows=d.catSorted.map(([cat,data],i)=>{
+    const pct=d.expense>0?Math.round((data.total/d.expense)*100):0;
+    const col=C.palette[i%C.palette.length];
+    const subs=Object.entries(data.subs).sort((a,b)=>b[1]-a[1]).map(([s,v])=>`${s} (${fmt(v)})`).join(' · ');
+    return`<tr style="${i%2?'background:#f8f8f8':''}">
+      <td><strong>${cat}</strong></td>
+      <td style="text-align:right;color:${col};font-weight:700">${fmt(data.total)}</td>
+      <td style="text-align:right;color:#666">${pct}%</td>
+      <td style="min-width:120px">${bar(pct,col,6)}</td>
+      <td style="color:#888;font-size:9px">${subs}</td>
+    </tr>`;
+  }).join('');
+
+  const monthRows=d.monthlyRows.map(([mk,v])=>{
+    const[y,mo]=mk.split('-');const net=v.income-v.expense;
+    return`<tr>
+      <td><strong>${MN[parseInt(mo)-1]} ${y}</strong></td>
+      <td style="text-align:right;color:${C.income};font-weight:700">${fmt(v.income)}</td>
+      <td style="text-align:right;color:${C.expense};font-weight:700">${fmt(v.expense)}</td>
+      <td style="text-align:right;font-weight:800;color:${net>=0?C.income:C.expense}">${net>=0?'+ ':'− '}${fmt(Math.abs(net))}</td>
+    </tr>`;
+  }).join('');
+
+  const accCards=d.accBals.map(a=>`
+    <td style="padding:10px;text-align:center;border:1px solid ${C.border};border-radius:8px;background:${C.surface}">
+      <div style="font-size:11px;font-weight:700;color:${C.text}">${a.icon||'💳'} ${a.name}</div>
+      <div style="font-size:14px;font-weight:900;margin-top:3px;color:${a.balance>=0?C.accent2:C.expense}">${fmt(a.balance)}</div>
+    </td>`).join('<td style="width:8px"></td>');
+
+  // toRgba helper for print
+  const toRgba=(hex,a)=>{try{const r=parseInt(hex.slice(1,3),16),g=parseInt(hex.slice(3,5),16),b=parseInt(hex.slice(5,7),16);return`rgba(${r},${g},${b},${a})`;}catch{return hex;}};
+
+  const html=`<!DOCTYPE html>
+<html>
+<head>
+<meta charset="UTF-8">
+<title>Financial Report — ${fmtDate(d.from)} to ${fmtDate(d.to)}</title>
+<style>
+  @page{size:A4;margin:15mm 12mm;}
+  *{box-sizing:border-box;margin:0;padding:0;font-family:Arial,Helvetica,sans-serif;}
+  body{color:${C.text};background:#fff;font-size:11px;line-height:1.5;}
+  h2{font-size:13px;font-weight:700;color:${C.text};margin:18px 0 8px;padding-bottom:5px;border-bottom:2px solid ${C.border};}
+  table{width:100%;border-collapse:collapse;font-size:10px;margin-bottom:4px;}
+  th{background:${C.surface};padding:6px 8px;text-align:left;border:1px solid ${C.border};font-size:9px;text-transform:uppercase;letter-spacing:.05em;color:${C.text2};}
+  td{padding:5px 8px;border:1px solid ${C.border};vertical-align:middle;color:${C.text};}
+  .page-break{page-break-before:always;}
+  .no-break{page-break-inside:avoid;}
+  thead{display:table-header-group;}
+  tr{page-break-inside:avoid;}
+  .header-block{background:linear-gradient(135deg,${C.accent},${C.balance});color:#fff;padding:18px 22px;border-radius:10px;margin-bottom:18px;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .stat-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin-bottom:18px;}
+  .stat-box{border-radius:8px;padding:12px;text-align:center;-webkit-print-color-adjust:exact;print-color-adjust:exact;}
+  .stat-label{font-size:8px;text-transform:uppercase;letter-spacing:.1em;color:${C.text2};margin-bottom:3px;}
+  .stat-val{font-size:14px;font-weight:900;}
+</style>
+</head>
+<body>
+
+<!-- PAGE 1: Header + Summary + Categories -->
+<div class="header-block">
+  <div style="font-size:20px;font-weight:900;letter-spacing:-.02em">budget.tracker</div>
+  <div style="font-size:11px;opacity:.85;margin-top:4px;font-weight:600">Financial Report &nbsp;·&nbsp; ${fmtDate(d.from)} — ${fmtDate(d.to)}</div>
+  <div style="font-size:10px;opacity:.65;margin-top:2px">${days} day${days>1?'s':''} · ${d.txs.length} transactions · Generated ${new Date().toLocaleDateString('en-IN',{day:'2-digit',month:'long',year:'numeric'})}</div>
+</div>
+
+<div class="stat-grid">
+  <div class="stat-box no-break" style="background:${toRgba(C.income,.1)}"><div class="stat-label">Total Income</div><div class="stat-val" style="color:${C.income}">${fmt(d.income)}</div></div>
+  <div class="stat-box no-break" style="background:${toRgba(C.expense,.1)}"><div class="stat-label">Total Expenses</div><div class="stat-val" style="color:${C.expense}">${fmt(d.expense)}</div></div>
+  <div class="stat-box no-break" style="background:${toRgba(C.balance,.1)}"><div class="stat-label">Net Saved</div><div class="stat-val" style="color:${d.savings>=0?C.balance:C.expense}">${fmt(d.savings)}</div></div>
+  <div class="stat-box no-break" style="background:${C.surface}"><div class="stat-label">Savings Rate</div><div class="stat-val" style="color:${d.savingsRate>=30?C.income:d.savingsRate>=15?C.warning:C.expense}">${d.savingsRate}%</div></div>
+</div>
+
+${d.monthlyRows.length>1?`<h2>📅 Monthly Breakdown</h2>
+<div class="no-break">
+<table>
+  <thead><tr><th>Month</th><th style="text-align:right">Income</th><th style="text-align:right">Expenses</th><th style="text-align:right">Net</th></tr></thead>
+  <tbody>${monthRows}</tbody>
+</table>
+</div>`:''}
+
+${d.catSorted.length?`<h2>📂 Spending by Category</h2>
+<div class="no-break">
+<table>
+  <thead><tr><th>Category</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th><th>Bar</th><th>Sub-categories</th></tr></thead>
+  <tbody>${catRows}</tbody>
+</table>
+</div>`:''}
+
+${Object.keys(d.incSubs).length?`<h2>💰 Income Sources</h2>
+<div class="no-break">
+<table>
+  <thead><tr><th>Source</th><th style="text-align:right">Amount</th><th style="text-align:right">%</th><th>Bar</th></tr></thead>
+  <tbody>${Object.entries(d.incSubs).sort((a,b)=>b[1]-a[1]).map(([src,amt],i)=>{
+    const pct=d.income>0?Math.round((amt/d.income)*100):0;
+    return`<tr style="${i%2?'background:#f8f8f8':''}"><td><strong>${src}</strong></td><td style="text-align:right;color:${C.income};font-weight:700">${fmt(amt)}</td><td style="text-align:right;color:#666">${pct}%</td><td>${bar(pct,C.income,6)}</td></tr>`;
+  }).join('')}
+  </tbody>
+</table>
+</div>`:''}
+
+<!-- PAGE 2+: All Transactions -->
+<div class="page-break">
+<h2>🧾 All Transactions (${d.txs.length})</h2>
+<table>
+  <thead><tr>
+    <th style="width:72px">Date</th>
+    <th style="width:90px">Category</th>
+    <th style="width:90px">Sub-Category</th>
+    <th style="width:90px">Account</th>
+    <th>Notes</th>
+    <th style="text-align:right;width:80px">Amount</th>
+  </tr></thead>
+  <tbody>${txRows}</tbody>
+</table>
+</div>
+
+<!-- Account Balances -->
+<h2 style="margin-top:18px">🏦 Current Account Balances</h2>
+<div class="no-break">
+<table><tr>${accCards}
+  <td style="width:8px"></td>
+  <td style="padding:10px;text-align:center;border:2px solid ${C.balance};border-radius:8px;background:${toRgba(C.balance,.1)}">
+    <div style="font-size:11px;font-weight:700;color:${C.text2}">Total Balance</div>
+    <div style="font-size:15px;font-weight:900;margin-top:3px;color:${C.balance}">${fmt(d.accBals.reduce((s,a)=>s+a.balance,0))}</div>
+  </td>
+</tr></table>
+</div>
+
+<div style="margin-top:24px;padding-top:10px;border-top:1px solid #ddd;font-size:9px;color:#999;text-align:center">
+  budget.tracker · Financial Report · ${fmtDate(d.from)} to ${fmtDate(d.to)} · ${d.txs.length} transactions
+</div>
+
+</body></html>`;
+
+  const win=window.open('','_blank','width=900,height=700');
+  win.document.write(html);
+  win.document.close();
+  win.focus();
+  setTimeout(()=>{win.print();},600);
+}
+
+function copyFullReport(){
+  const d=getFullReportData();if(!d)return;
+  const MN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
+  const lines=[
+    `📄 FINANCIAL REPORT`,
+    `📅 ${d.from} → ${d.to} (${d.txs.length} transactions)`,``,
+    `💰 Income:      ${fmt(d.income)}`,
+    `💸 Expenses:    ${fmt(d.expense)}`,
+    `🏦 Net Saved:   ${fmt(d.savings)} (${d.savingsRate}%)`,``,
+    `📂 CATEGORY BREAKDOWN:`,
+    ...d.catSorted.map(([cat,data])=>`  ${cat}: ${fmt(data.total)}`),``,
+    `🏦 ACCOUNT BALANCES:`,
+    ...d.accBals.map(a=>`  ${a.icon||''} ${a.name}: ${fmt(a.balance)}`),
+    `  TOTAL: ${fmt(d.accBals.reduce((s,a)=>s+a.balance,0))}`,``,
+    `_Generated by budget.tracker_`,
+  ];
+  navigator.clipboard.writeText(lines.join('\n')).then(()=>showToast('Report copied!')).catch(()=>showToast('Copy failed',true));
+}
 
 function showToast(msg,isError=false){const t=document.getElementById('toast');t.textContent=msg;t.style.background=isError?'var(--expense-color)':'var(--accent)';t.style.color=isError?'#fff':'#0d0f14';t.classList.add('show');setTimeout(()=>t.classList.remove('show'),2200);}
 
@@ -2562,6 +3155,7 @@ Object.assign(window,{
   onRowCheck,toggleSelectAll,deleteSelected,clearSelection,
   openImportModal,closeImportModal,onImportDrop,onImportFile,confirmImport,
   exportCSV,addTransaction,onTxTypeChange,updateSubcategories,updateEditSubcategories,
+  parseCSVLine,
   addAccount,deleteAccount,doTransfer,populateAccountDropdowns,
   toggleAccEdit,saveAccountEdit,
   addGoal,deleteGoal,renderGoals,renderGoalProgress,
@@ -2569,6 +3163,7 @@ Object.assign(window,{
   renderTable,renderAccounts,renderAnalytics,setAnalyticsView,
   setPreset,applyCustomRange,saveMemo,
   openSummaryReport,closeSummaryReport,renderSummaryReport,printSummary,whatsappSummary,copySummary,
+  openFullReport,closeFullReport,renderFullReport,printFullReport,copyFullReport,setFrPreset,
   setTheme,toggleThemePicker,closeThemePicker,
   addWish,deleteWish,markWishPurchased,openWishBuyModal,openWishBuyModalFromCard,closeWishBuyModal,confirmBuyWish,renderWishlist,populateWishAccountDropdowns,openWishFundModal,closeWishFundModal,confirmFundWish,updateCardAffordability,updateBuyPreview,
 });
